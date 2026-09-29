@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MemoPet · 递归状态电子宠物</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="top">
+    <div class="logo">memo<span>pet</span></div>
+    <span id="status" class="dot-off" title="服务状态">●</span>
+  </header>
+
+  <main>
+    <aside id="slots-panel">
+      <div class="panel-title">猫窝</div>
+      <div id="slot-list"></div>
+      <div class="create-row">
+        <input id="new-name" placeholder="起个名字" maxlength="16">
+        <button id="btn-create">领养</button>
+      </div>
+    </aside>
+
+    <section id="stage-panel">
+      <div id="stage">
+        <div id="pet-emoji">🐱</div>
+        <div id="pet-name" class="muted">还没有猫</div>
+        <div id="pet-meta" class="muted"></div>
+        <div class="meter-row"><span>饱食</span><div class="bar"><div id="bar-hunger"></div></div></div>
+        <div class="meter-row"><span>心情</span><div class="bar"><div id="bar-mood"></div></div></div>
+      </div>
+      <div id="bubble" class="hidden"></div>
+      <div id="actions">
+        <button data-act="feed" title="喂小鱼干">🍖 喂食</button>
+        <button data-act="play" title="逗猫棒">🎾 玩耍</button>
+        <button data-act="pet" title="摸头">🫳 摸摸</button>
+        <button data-act="scold" title="责骂（后果自负）">🙀 责骂</button>
+      </div>
+      <form id="chat-row">
+        <input id="chat-input" placeholder="跟它说点什么…" maxlength="200" autocomplete="off">
+        <button type="submit">说</button>
+      </form>
+      <div class="pet-tools">
+        <button id="btn-fork" title="复制此刻的大脑状态为新宠物">🧬 分身</button>
+        <button id="btn-delete" class="danger" title="放它自由（删除存档）">🙏 放归</button>
+      </div>
+    </section>
+
+    <aside id="diary-panel">
+      <div class="panel-title">日记本</div>
+      <div id="diary-list"></div>
+    </aside>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

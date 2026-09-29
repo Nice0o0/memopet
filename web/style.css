@@ -1,0 +1,159 @@
+/* MemoPet — 暗色主题（与 stateswap 视觉同源） */
+:root {
+  --bg: #0f1117;
+  --panel: #171a23;
+  --card: #1d212d;
+  --border: #262b3a;
+  --border-strong: #333a50;
+  --text: #e8eaf2;
+  --muted: #8b93a9;
+  --accent: #6074fe;
+  --accent-weak: rgba(96, 116, 254, 0.16);
+  --danger: #e2606c;
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.7 "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.muted { color: var(--muted); }
+.hidden { display: none !important; }
+
+#top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.logo { font-weight: 700; font-size: 17px; }
+.logo span { color: var(--accent); }
+.dot-on { color: #4ade80; }
+.dot-off { color: var(--danger); }
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr 300px;
+  gap: 16px;
+  padding: 16px 20px;
+  min-height: 0;
+}
+aside, #stage-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.panel-title { font-weight: 600; margin-bottom: 10px; }
+
+/* 猫窝 */
+#slot-list { flex: 1; overflow-y: auto; }
+.slot {
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.slot:hover { background: var(--card); }
+.slot.active { background: var(--accent-weak); border-color: var(--accent); }
+.slot-name { font-weight: 600; }
+.slot-meta { font-size: 12px; color: var(--muted); }
+.tip { font-size: 12px; padding: 8px; }
+.create-row { display: flex; gap: 8px; margin-top: 10px; }
+input {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+}
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.1); }
+button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+
+/* 舞台 */
+#stage-panel { align-items: center; text-align: center; gap: 12px; }
+#stage { width: 100%; }
+#pet-emoji {
+  font-size: 84px;
+  line-height: 1.2;
+  animation: bounce 2.4s ease-in-out infinite;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+#pet-name { font-size: 17px; font-weight: 700; color: var(--text); }
+#pet-meta { font-size: 12px; margin-bottom: 6px; }
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 280px;
+  margin: 4px auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.bar {
+  flex: 1;
+  height: 8px;
+  background: var(--card);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar > div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.4s;
+}
+#bar-mood { background: #f0a35e; }
+
+#bubble {
+  width: 100%;
+  min-height: 52px;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px 14px;
+  text-align: left;
+}
+#actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+#chat-row { display: flex; gap: 8px; width: 100%; }
+.pet-tools { display: flex; gap: 8px; }
+
+/* 日记 */
+#diary-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.diary-entry {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.diary-head { font-size: 12px; color: var(--muted); }
+.diary-reply { font-size: 13px; }
+
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; overflow-y: auto; }
+  body { height: auto; min-height: 100vh; }
+  #diary-list { max-height: 300px; }
+}

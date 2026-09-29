@@ -1,0 +1,15 @@
+[project]
+name = "memopet"
+version = "0.1.0"
+description = "A virtual pet whose brain is an RWKV-7 recurrent state — memories you can save, fork, and carry away."
+requires-python = ">=3.12"
+# 运行依赖由 stateswap 的 venv 提供（torch/transformers/flash-linear-attention/fastapi）。
+# 本包直接以 `python -m memopet.server` 从仓库根目录运行，无需安装。
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
