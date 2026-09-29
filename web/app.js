@@ -104,7 +104,7 @@ async function interact(action, text = "") {
       method: "POST",
       body: JSON.stringify({ action, text }),
     });
-    bubble.textContent = r.reply;
+    bubble.textContent = r.dream ? `🌙 它刚睡醒，梦到了：${r.dream}\n\n${r.reply}` : r.reply;
     renderPet(r);
     await loadSlots();
     await loadDiary();
@@ -117,12 +117,23 @@ async function interact(action, text = "") {
 }
 
 /* ---------- 创建 / 分身 / 放归 ---------- */
+async function loadPersonas() {
+  const { personas } = await api("/api/personas");
+  const sel = $("new-persona");
+  sel.innerHTML = personas
+    .map((p) => `<option value="${p.id}">${p.id === "none" ? "白纸（冷启动）" : `🧬 ${p.name}`}</option>`)
+    .join("");
+}
+
 $("btn-create").onclick = async () => {
   const name = $("new-name").value.trim();
   if (!name || busy) return;
   busy = true;
   try {
-    const p = await api("/api/pets", { method: "POST", body: JSON.stringify({ name }) });
+    const p = await api("/api/pets", {
+      method: "POST",
+      body: JSON.stringify({ name, persona_id: $("new-persona").value }),
+    });
     $("new-name").value = "";
     await loadSlots();
     await selectPet(p.pet_id);
@@ -178,6 +189,7 @@ $("chat-row").onsubmit = (ev) => {
     } catch { setStatus(false, "连接中…"); }
     await new Promise((r) => setTimeout(r, 1000));
   }
+  await loadPersonas();
   const pets = await loadSlots();
   if (pets.length) await selectPet(pets[0].pet_id);
 })();

@@ -23,9 +23,11 @@ class InteractRequest(BaseModel):
 
 class NameRequest(BaseModel):
     name: str
+    persona_id: str = "none"  # none = 白纸冷启动；否则为 S0 人格 id
 
 
-def create_app(model_dir: str, vocab: str, pets_dir: str) -> FastAPI:
+def create_app(model_dir: str, vocab: str, pets_dir: str,
+               s0_dir: str | None = None, dream_gap_hours: float = 6.0) -> FastAPI:
     app = FastAPI(title="memopet", version="0.1.0")
     state = {"home": None}
 
@@ -33,7 +35,8 @@ def create_app(model_dir: str, vocab: str, pets_dir: str) -> FastAPI:
     def _startup():
         from .pet import PetHome
 
-        state["home"] = PetHome(model_dir, vocab, pets_dir)
+        state["home"] = PetHome(model_dir, vocab, pets_dir,
+                                s0_dir=s0_dir, dream_gap_hours=dream_gap_hours)
 
     @app.get("/health")
     def health():
@@ -48,10 +51,15 @@ def create_app(model_dir: str, vocab: str, pets_dir: str) -> FastAPI:
     def list_pets():
         return {"pets": _home().list()}
 
+    @app.get("/api/personas")
+    def list_personas():
+        """可选择的出生人格（烘焙好的 S0）：none = 白纸冷启动。"""
+        return {"personas": [{"id": pid, "name": pid} for pid in _home().personas]}
+
     @app.post("/api/pets")
     def create_pet(req: NameRequest = Body(...)):
         try:
-            return _home().create(req.name)
+            return _home().create(req.name, persona_id=req.persona_id)
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -93,12 +101,17 @@ def main():
     ap.add_argument("--model", default=str(ROOT.parent / "rwkv" / "models" / "rwkv7-1.5b-world-hf"))
     ap.add_argument("--vocab", default=str(ROOT.parent / "rwkv" / "vendor" / "rwkv_vocab_v20230424.txt"))
     ap.add_argument("--pets-dir", default=str(ROOT / "pets"))
+    ap.add_argument("--s0-dir", default=str(ROOT.parent / "rwkv" / "personas"),
+                    help="可选出生人格目录（*/s0.pt），创建宠物时可注入初始状态")
+    ap.add_argument("--dream-gap-hours", type=float, default=6.0,
+                    help="距上次互动超过该小时数，醒来先做梦（0.001 可演示）")
     ap.add_argument("--port", type=int, default=8001)
     args = ap.parse_args()
 
     import uvicorn
 
-    uvicorn.run(create_app(args.model, args.vocab, args.pets_dir),
+    uvicorn.run(create_app(args.model, args.vocab, args.pets_dir,
+                           s0_dir=args.s0_dir, dream_gap_hours=args.dream_gap_hours),
                 host="127.0.0.1", port=args.port, log_level="info")
 
 

@@ -18,10 +18,11 @@ from pathlib import Path
 
 import torch
 from stateswap.engine import Engine, _unique_4gram_ratio
-from stateswap.s0 import S0, load_base_model, make_cache
+from stateswap.s0 import S0, load_base_model, load_s0_payload, make_cache
 from stateswap.tokenizer import load_tokenizer
 
 MAX_NEW_TOKENS = 96
+DREAM_TOKENS = 64
 REPLAY_EVENTS = 3  # 近事以可见文本重放（1.5B 状态事实保持弱，stateswap 工程结论）
 DEGEN_MIN_CHARS = 120
 DEGEN_MAX_UQ4 = 0.72
@@ -49,6 +50,9 @@ class PetMeta:
     interactions: int = 0
     hunger: float = 0.55  # 0~1，越高越饱
     mood: float = 0.55
+    persona_id: str = "none"  # 出生大脑来自哪个 S0（none = 冷启动白纸）
+    last_seen: float = 0.0  # 上次互动时间；间隔超过梦阈值则先"做梦"
+    dreams: int = 0
 
 
 @dataclass
@@ -69,12 +73,20 @@ def _meters_hint(meta: PetMeta) -> str:
 class PetHome:
     """管理模型（单例）与所有宠物的持久状态。"""
 
-    def __init__(self, model_dir: str, vocab: str, pets_dir: str | Path, device: str = "cuda"):
+    def __init__(self, model_dir: str, vocab: str, pets_dir: str | Path,
+                 s0_dir: str | Path | None = None, dream_gap_hours: float = 6.0,
+                 device: str = "cuda"):
         self.model = load_base_model(model_dir, device=device)
         self.tok = load_tokenizer(vocab)
         self.device = device
         self.pets_dir = Path(pets_dir)
         self.pets_dir.mkdir(parents=True, exist_ok=True)
+        self.dream_gap_sec = max(0.0, dream_gap_hours) * 3600
+        # 可选出生人格：{id: s0 文件路径}，创建宠物时注入初始状态
+        self.personas: dict[str, Path | None] = {"none": None}
+        if s0_dir and Path(s0_dir).exists():
+            for f in sorted(Path(s0_dir).glob("*/s0.pt")):
+                self.personas[f.parent.name] = f
         self.pets: dict[str, MemoPet] = {}
         self._lock = threading.Lock()
         for f in sorted(self.pets_dir.glob("*.pt")):
@@ -85,8 +97,11 @@ class PetHome:
 
     # ---------- 存档 I/O ----------
 
-    def _blank_cache(self):
-        holder = S0(self.model).to(self.device)  # 全零 S0 = 冷启动
+    def _blank_cache(self, s0_path: Path | None = None):
+        holder = S0(self.model).to(self.device)
+        if s0_path is not None:
+            # 出生人格：以训练好的 S0 作为初始大脑（非零冷启动）
+            holder.load_stacked(load_s0_payload(torch.load(s0_path, map_location="cpu", weights_only=False)))
         return make_cache(self.model, holder, detach_states=True)
 
     def _snapshot(self, pet: MemoPet) -> list:
@@ -132,15 +147,20 @@ class PetHome:
 
     # ---------- 生命周期 ----------
 
-    def create(self, name: str) -> dict:
+    def create(self, name: str, persona_id: str = "none") -> dict:
         name = name.strip()[:16]
         if not name:
             raise ValueError("宠物需要名字")
-        meta = PetMeta(pet_id=uuid.uuid4().hex[:10], name=name, born_at=time.time())
-        pet = MemoPet(meta=meta, cache=self._blank_cache())
+        s0_path = self.personas.get(persona_id)
+        if persona_id != "none" and s0_path is None:
+            raise ValueError(f"unknown persona {persona_id}")
+        meta = PetMeta(pet_id=uuid.uuid4().hex[:10], name=name, born_at=time.time(),
+                       persona_id=persona_id, last_seen=time.time())
+        pet = MemoPet(meta=meta, cache=self._blank_cache(s0_path))
         # 创世预填：把"它是谁"写进状态——这段经历永远在它脑子里
+        origin = "带着一段与生俱来的性格（烘焙好的初始状态）" if s0_path is not None else "作为一张白纸"
         genesis = (
-            f"你是一只电子小猫，名字叫「{name}」。你的记忆保存在一个递归状态张量里，"
+            f"你是一只电子小猫，名字叫「{name}」，{origin}。你的记忆保存在一个递归状态张量里，"
             f"主人做的每一件事都会写进你的脑子，慢慢塑造你的性格。\n"
             f"今天是你们相遇的第一天，主人把你从屏幕里领了出来。\n\n"
             f"User: （你睁开了眼睛，第一次看到了主人）你好呀，小家伙。\n\nAssistant: "
@@ -165,6 +185,8 @@ class PetHome:
             name=(new_name.strip() or src.meta.name + "的分身")[:16],
             born_at=time.time(),
             hunger=src.meta.hunger, mood=src.meta.mood,
+            persona_id=src.meta.persona_id, dreams=src.meta.dreams,
+            last_seen=time.time(),
         )
         pet = MemoPet(meta=meta, cache=self._blank_cache(), diary=list(src.diary))
         self._restore(pet, self._snapshot(src))  # 大脑 = 源宠物此刻状态的完整拷贝
@@ -195,6 +217,8 @@ class PetHome:
             "hunger": round(m.hunger, 2),
             "mood": round(m.mood, 2),
             "diary_len": len(pet.diary),
+            "persona_id": m.persona_id,
+            "dreams": m.dreams,
         }
 
     def list(self) -> list[dict]:
@@ -202,13 +226,14 @@ class PetHome:
 
     # ---------- 交互 ----------
 
-    def _generate(self, pet: MemoPet, out, prompt_ids: list[int]) -> tuple[str, bool]:
+    def _generate(self, pet: MemoPet, out, prompt_ids: list[int],
+                  max_tokens: int = MAX_NEW_TOKENS) -> tuple[str, bool]:
         """逐 token 采样（复用 stateswap 采样器），停轮条件与 stateswap 对齐：
         \\n\\n 或幻觉出的下一轮 "User:"；停止前不再把 token 喂回状态。"""
         inc = codecs.getincrementaldecoder("utf-8")(errors="replace")
         text, recent = "", list(prompt_ids)
         with torch.no_grad():
-            for _ in range(MAX_NEW_TOKENS):
+            for _ in range(max_tokens):
                 nxt = Engine._sample(None, out.logits[0, -1], 0.8, 0.8, recent, 1.25, 8)
                 recent.append(nxt)
                 delta = inc.decode(self.tok.id_to_bytes[nxt])
@@ -233,9 +258,40 @@ class PetHome:
                 )
         return text, False
 
+    def _dream(self, pet: MemoPet) -> str | None:
+        """睡了一觉回来先做梦：梦里是当前状态生成的碎片，随后成为真实记忆
+        （生成过程本身写进状态）。退化则回滚跳过——梦可以怪，不能复读。"""
+        snap = self._snapshot(pet)
+        lines = "".join(f"- {e['label']}\n" for e in pet.diary[-2:])
+        prompt = (
+            f"（最近的相处回忆：\n{lines}）\n\n"
+            "User: （你睡着了。梦里有一些模模糊糊的碎片……）\n\nAssistant: "
+        )
+        ids = self.tok.encode(prompt)
+        with torch.no_grad():
+            out = self.model(
+                input_ids=torch.tensor([ids], device=self.device),
+                past_key_values=pet.cache, use_cache=True,
+            )
+        dream, _ = self._generate(pet, out, prompt_ids=ids, max_tokens=DREAM_TOKENS)
+        if len(dream) >= DEGEN_MIN_CHARS and _unique_4gram_ratio(dream) < DEGEN_MAX_UQ4:
+            self._restore(pet, snap)
+            return None
+        pet.meta.dreams += 1
+        pet.diary.append({"t": time.time(), "label": "做了一个梦", "reply": dream})
+        self._save(pet)
+        return dream
+
     def interact(self, pet_id: str, action: str, text: str = "") -> dict:
         pet = self.get(pet_id)
         with pet.lock:
+            # 睡了一觉（间隔超过梦阈值）→ 醒来先做梦，梦写进状态与日记
+            dream = None
+            now = time.time()
+            if (pet.meta.last_seen > 0 and pet.meta.interactions >= 1
+                    and now - pet.meta.last_seen >= self.dream_gap_sec):
+                dream = self._dream(pet)
+            pet.meta.last_seen = now
             snap = self._snapshot(pet)  # 退化护栏：本轮开始前的大脑快照
             if action == "chat":
                 user_text = (text or "").strip()[:200] or "（沉默地看着你）"
@@ -274,4 +330,4 @@ class PetHome:
             pet.meta.interactions += 1
             pet.diary.append({"t": time.time(), "label": label, "reply": reply})
             self._save(pet)
-            return {"reply": reply, "degenerated": False, **self.describe(pet)}
+            return {"reply": reply, "degenerated": False, "dream": dream, **self.describe(pet)}
