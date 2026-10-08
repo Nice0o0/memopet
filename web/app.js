@@ -53,8 +53,53 @@ async function loadSlots() {
 }
 
 /* ---------- 舞台 ---------- */
+/* 手绘 SVG 小猫：随心情变表情（开心眯眼 / 正常圆眼 / 难过垂眼），
+   项圈用品牌蓝紫色，跨亮暗主题通用。 */
+function catSvg(mood) {
+  const eyes = mood === "happy"
+    ? '<path d="M36 40 q4 -5 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
+      + '<path d="M52 40 q4 -5 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
+    : mood === "sad"
+    ? '<path d="M36 43 q4 4 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
+      + '<path d="M52 43 q4 4 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
+    : '<circle cx="40" cy="40" r="3.1" fill="#4a3520"/><circle cx="56" cy="40" r="3.1" fill="#4a3520"/>';
+  const mouth = mood === "happy"
+    ? '<path d="M42 50 q6 7 12 0" stroke="#4a3520" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
+    : mood === "sad"
+    ? '<path d="M44 54 q4 -3.5 8 0" stroke="#4a3520" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
+    : '<path d="M44 51 q4 3 8 0" stroke="#4a3520" stroke-width="2.2" fill="none" stroke-linecap="round"/>';
+  const ears = mood === "sad"
+    ? '<polygon points="29,27 20,10 40,19" fill="#f7b955"/><polygon points="67,27 76,10 56,19" fill="#f7b955"/>'
+    : '<polygon points="30,26 24,5 43,17" fill="#f7b955"/><polygon points="66,26 72,5 53,17" fill="#f7b955"/>';
+  return `<svg viewBox="0 0 96 96" width="112" height="112" aria-hidden="true">
+    <path d="M26 76 q -15 2 -13 -15 q 1 -9 9 -9" stroke="#f0a53e" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <ellipse cx="48" cy="72" rx="26" ry="17" fill="#f7b955"/>
+    ${ears}
+    <polygon points="32.5,23.5 28.5,12 39,19" fill="#f2a0a0" opacity="0.9"/>
+    <polygon points="63.5,23.5 67.5,12 57,19" fill="#f2a0a0" opacity="0.9"/>
+    <circle cx="48" cy="41" r="24" fill="#f7b955"/>
+    <ellipse cx="35" cy="48" rx="4" ry="2.4" fill="#f2a0a0" opacity="0.55"/>
+    <ellipse cx="61" cy="48" rx="4" ry="2.4" fill="#f2a0a0" opacity="0.55"/>
+    ${eyes}
+    <polygon points="45.5,46 50.5,46 48,49" fill="#d16c6c"/>
+    ${mouth}
+    <g stroke="#c8933a" stroke-width="1.4" stroke-linecap="round" opacity="0.8">
+      <line x1="28" y1="45" x2="15" y2="42"/><line x1="28" y1="49" x2="15" y2="50"/>
+      <line x1="68" y1="45" x2="81" y2="42"/><line x1="68" y1="49" x2="81" y2="50"/>
+    </g>
+    <path d="M26 63 q22 10 44 0 l 0 5 q -22 10 -44 0 z" fill="#5b74ff"/>
+    <circle cx="48" cy="70.5" r="3.4" fill="#ffd34d" stroke="#c8933a" stroke-width="1"/>
+    <line x1="46" y1="70" x2="50" y2="71" stroke="#c8933a" stroke-width="1"/>
+  </svg>`;
+}
+
+function renderCat(mood) {
+  $("pet-emoji").innerHTML = catSvg(mood);
+}
+
 function renderPet(p) {
-  $("pet-emoji").textContent = p.mood > 0.7 ? "😺" : p.mood < 0.35 ? "😿" : "🐱";
+  const mood = p.mood > 0.7 ? "happy" : p.mood < 0.35 ? "sad" : "normal";
+  renderCat(mood);
   $("pet-name").textContent = p.name;
   $("pet-meta").textContent = `来到你家 ${p.age_days} 天 · ${p.interactions} 次互动`;
   $("bar-hunger").style.width = `${Math.round(p.hunger * 100)}%`;

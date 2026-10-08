@@ -220,10 +220,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   background: radial-gradient(ellipse 62% 46% at 50% 36%, var(--accent-weak), transparent 72%);
 }
 #pet-emoji {
-  font-size: 96px;
-  line-height: 1.2;
   animation: bounce 2.6s ease-in-out infinite;
 }
+#pet-emoji svg { display: block; }
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-9px); }
