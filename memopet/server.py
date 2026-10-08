@@ -75,7 +75,7 @@ def create_app(model_dir: str, vocab: str, pets_dir: str,
     @app.get("/api/pets/{pet_id}/diary")
     def diary(pet_id: str):
         pet = _home().get(pet_id)
-        return {"diary": pet.diary}
+        return {"diary": pet.diary[-100:]}  # 端点只回最近 100 条，完整日记在存档里
 
     @app.post("/api/pets/{pet_id}/fork")
     def fork(pet_id: str, req: NameRequest = Body(...)):

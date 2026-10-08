@@ -67,7 +67,17 @@ aside, #stage-panel {
 .slot-name { font-weight: 600; }
 .slot-meta { font-size: 12px; color: var(--muted); }
 .tip { font-size: 12px; padding: 8px; }
-.create-row { display: flex; gap: 8px; margin-top: 10px; }
+.create-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.create-row input { flex: 1; min-width: 90px; }
+select {
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 6px;
+  font: inherit;
+  max-width: 100%;
+}
 input {
   flex: 1;
   min-width: 0;

@@ -26,6 +26,9 @@ DREAM_TOKENS = 64
 REPLAY_EVENTS = 3  # 近事以可见文本重放（1.5B 状态事实保持弱，stateswap 工程结论）
 DEGEN_MIN_CHARS = 120
 DEGEN_MAX_UQ4 = 0.72
+DIARY_MAX = 500  # 日记上限：存档与 /diary 端点都随此封顶
+DECAY_HUNGER_PER_HOUR = 0.02  # 时间流逝的代价：不喂自然会饿
+DECAY_MOOD_DRIFT_PER_HOUR = 0.02  # 心情每小时向中位回归 2%
 
 ACTION_LABELS = {
     "feed": "主人往你碗里倒了一把小鱼干",
@@ -70,6 +73,13 @@ def _meters_hint(meta: PetMeta) -> str:
     return f"（你现在的身体感受：肚子{word(meta.hunger, '很饿', '很饱')}，心情{word(meta.mood, '低落', '很好')}）"
 
 
+def _decay_meters(meta: PetMeta, gap_hours: float) -> None:
+    """时间流逝的代价：饿意随小时累积，心情缓慢回归中位——
+    不回来玩它，它是真的会饿坏的。"""
+    meta.hunger = max(0.0, meta.hunger - gap_hours * DECAY_HUNGER_PER_HOUR)
+    meta.mood += (0.5 - meta.mood) * min(1.0, gap_hours * DECAY_MOOD_DRIFT_PER_HOUR)
+
+
 class PetHome:
     """管理模型（单例）与所有宠物的持久状态。"""
 
@@ -82,11 +92,16 @@ class PetHome:
         self.pets_dir = Path(pets_dir)
         self.pets_dir.mkdir(parents=True, exist_ok=True)
         self.dream_gap_sec = max(0.0, dream_gap_hours) * 3600
-        # 可选出生人格：{id: s0 文件路径}，创建宠物时注入初始状态
+        # 可选出生人格：{id: s0 文件路径}，创建宠物时注入初始状态。
+        # 过滤任务/实验人格：zh2en 会把一切翻译成英文；mem-/mix-/scaling- 是
+        # 研究产物——否则能领养出"只会翻译、不能聊天"的猫（stateswap 分组教训）
         self.personas: dict[str, Path | None] = {"none": None}
         if s0_dir and Path(s0_dir).exists():
             for f in sorted(Path(s0_dir).glob("*/s0.pt")):
-                self.personas[f.parent.name] = f
+                pid = f.parent.name
+                if pid.startswith(("zh2en", "mem-", "mix-", "scaling-")):
+                    continue
+                self.personas[pid] = f
         self.pets: dict[str, MemoPet] = {}
         self._lock = threading.Lock()
         for f in sorted(self.pets_dir.glob("*.pt")):
@@ -126,6 +141,8 @@ class PetHome:
             i: tuple(pet.cache[i][k].to("cpu") for k in keys)
             for i in range(self.model.config.num_hidden_layers)
         }
+        if len(pet.diary) > DIARY_MAX:
+            pet.diary = pet.diary[-DIARY_MAX:]
         payload = {"meta": asdict(pet.meta), "diary": pet.diary, "state": state}
         tmp = self.pets_dir / f".{pet.meta.pet_id}.pt.tmp"
         torch.save(payload, tmp)
@@ -134,6 +151,9 @@ class PetHome:
     def _adopt(self, path: Path) -> MemoPet:
         payload = torch.load(path, map_location="cpu", weights_only=False)
         meta = PetMeta(**payload["meta"])
+        if meta.last_seen == 0:
+            # 旧存档没有 last_seen 字段：回填出生时间，否则做梦条件永远不满足
+            meta.last_seen = meta.born_at
         pet = MemoPet(meta=meta, cache=self._blank_cache(), diary=payload["diary"])
         for i, (rec, conv, ffn) in payload["state"].items():
             pet.cache.update(
@@ -189,7 +209,9 @@ class PetHome:
             last_seen=time.time(),
         )
         pet = MemoPet(meta=meta, cache=self._blank_cache(), diary=list(src.diary))
-        self._restore(pet, self._snapshot(src))  # 大脑 = 源宠物此刻状态的完整拷贝
+        with src.lock:  # 快照必须拿源宠物的锁，防止拷到正在交互中的一半状态
+            src_snap = self._snapshot(src)
+        self._restore(pet, src_snap)  # 大脑 = 源宠物此刻状态的完整拷贝
         with self._lock:
             self.pets[meta.pet_id] = pet
         self._save(pet)
@@ -262,7 +284,9 @@ class PetHome:
         """睡了一觉回来先做梦：梦里是当前状态生成的碎片，随后成为真实记忆
         （生成过程本身写进状态）。退化则回滚跳过——梦可以怪，不能复读。"""
         snap = self._snapshot(pet)
-        lines = "".join(f"- {e['label']}\n" for e in pet.diary[-2:])
+        # 梦的回忆只取"真实相处"，不引用上一次的梦——梦里套梦会滚雪球
+        real = [e for e in pet.diary if e["label"] != "做了一个梦"]
+        lines = "".join(f"- {e['label']}\n" for e in real[-2:])
         prompt = (
             f"（最近的相处回忆：\n{lines}）\n\n"
             "User: （你睡着了。梦里有一些模模糊糊的碎片……）\n\nAssistant: "
@@ -285,13 +309,18 @@ class PetHome:
     def interact(self, pet_id: str, action: str, text: str = "") -> dict:
         pet = self.get(pet_id)
         with pet.lock:
+            now = time.time()
+            prev_seen = pet.meta.last_seen
+            gap_hours = max(0.0, now - prev_seen) / 3600 if prev_seen else 0.0
             # 睡了一觉（间隔超过梦阈值）→ 醒来先做梦，梦写进状态与日记
             dream = None
-            now = time.time()
-            if (pet.meta.last_seen > 0 and pet.meta.interactions >= 1
-                    and now - pet.meta.last_seen >= self.dream_gap_sec):
+            if (prev_seen > 0 and pet.meta.interactions >= 1
+                    and now - prev_seen >= self.dream_gap_sec):
                 dream = self._dream(pet)
             pet.meta.last_seen = now
+            # 时间流逝的代价：不喂自然会饿、心情回归中位（作用于动作加成之前）
+            if gap_hours > 0:
+                _decay_meters(pet.meta, gap_hours)
             snap = self._snapshot(pet)  # 退化护栏：本轮开始前的大脑快照
             if action == "chat":
                 user_text = (text or "").strip()[:200] or "（沉默地看着你）"
