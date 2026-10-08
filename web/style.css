@@ -165,38 +165,110 @@ button:hover:not(:disabled) { filter: brightness(1.08); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ---------- 舞台 ---------- */
+/* ---------- 舞台（宠物房间） ---------- */
 #stage-panel {
-  align-items: center;
-  text-align: center;
-  gap: 14px;
   background: var(--card);
   box-shadow: var(--shadow);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
 }
-#stage { width: 100%; }
+
+/* 头部名牌 + 工具 */
+#stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+}
+.head-info { text-align: left; min-width: 0; }
+#pet-name { font-size: 16px; font-weight: 700; }
+#pet-meta { font-size: 11.5px; margin-top: 1px; }
+.head-tools { display: flex; gap: 6px; flex-shrink: 0; }
+.head-tools button {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.head-tools button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+  filter: none;
+}
+.head-tools button.danger:hover:not(:disabled) {
+  border-color: var(--err);
+  background: transparent;
+  color: var(--err);
+}
+
+/* 栖息区：环境光 + 猫 + 气泡，占满剩余空间 */
+#habitat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px 18px;
+  min-height: 230px;
+  background: radial-gradient(ellipse 62% 46% at 50% 36%, var(--accent-weak), transparent 72%);
+}
 #pet-emoji {
-  font-size: 92px;
-  line-height: 1.25;
+  font-size: 96px;
+  line-height: 1.2;
   animation: bounce 2.6s ease-in-out infinite;
 }
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-9px); }
 }
-#pet-name { font-size: 18px; font-weight: 700; }
-#pet-meta { font-size: 11.5px; margin-top: 2px; color: var(--muted); }
 
+/* 气泡带小尾巴指向猫 */
+#bubble {
+  position: relative;
+  max-width: 94%;
+  min-height: 48px;
+  background: var(--bubble);
+  border-radius: 14px;
+  padding: 10px 16px;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#bubble::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 13px;
+  height: 13px;
+  background: var(--bubble);
+  border-radius: 3px;
+}
+
+/* 状态条 */
+#meters {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 22px 0;
+}
 .meter-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  max-width: 280px;
-  margin: 5px auto;
   font-size: 12px;
   color: var(--muted);
 }
-.meter-row > span { width: 3em; text-align: right; }
+.meter-row > span { width: 4.5em; text-align: left; }
 .bar {
   flex: 1;
   height: 8px;
@@ -211,48 +283,55 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   transition: width 0.4s;
 }
 
-/* 宠物说话：与 stateswap 用户气泡同款底色 */
-#bubble {
+/* 2×2 动作卡 */
+#actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   width: 100%;
-  min-height: 56px;
-  background: var(--bubble);
-  border-radius: 14px;
-  padding: 10px 16px;
-  text-align: left;
-  white-space: pre-wrap;
-  word-break: break-word;
+  padding: 14px 22px 6px;
 }
-
-/* 动作按钮：stateswap 的 chip 药丸风格 */
-#actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 #actions button {
-  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: var(--panel);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: 12px;
   color: var(--text);
-  font-weight: 500;
-  font-size: 13px;
-  padding: 7px 14px;
-  transition: border-color 0.15s, background 0.15s;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 8px;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
+#actions button span { font-weight: 500; }
 #actions button:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--accent-weak);
+  color: var(--accent);
   filter: none;
 }
-#chat-row { display: flex; gap: 8px; width: 100%; }
-#chat-row button { border-radius: 10px; }
-.pet-tools { display: flex; gap: 8px; }
-.pet-tools button {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 12.5px;
-  padding: 6px 10px;
+
+/* 输入条 + 圆形发送钮 */
+#chat-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 22px 18px;
 }
-.pet-tools button:hover:not(:disabled) { filter: none; color: var(--accent); background: var(--panel); }
-.pet-tools button.danger:hover { color: var(--err); }
+#chat-row input { flex: 1; border-radius: 999px; padding: 10px 16px; }
+#chat-row button {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  padding: 0;
+  flex-shrink: 0;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* ---------- 日记 ---------- */
 #diary-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }

@@ -11,7 +11,7 @@
       document.documentElement.dataset.theme = saved || (prefersDark ? "dark" : "light");
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=0.3">
+  <link rel="stylesheet" href="style.css?v=0.4">
 </head>
 <body>
   <header id="top">
@@ -32,28 +32,38 @@
     </aside>
 
     <section id="stage-panel">
-      <div id="stage">
+      <div id="stage-head">
+        <div class="head-info">
+          <div id="pet-name">还没有猫</div>
+          <div id="pet-meta" class="muted"></div>
+        </div>
+        <div class="head-tools">
+          <button id="btn-fork" title="分身：复制此刻的大脑状态为新宠物">🧬</button>
+          <button id="btn-delete" class="danger" title="放归：删除它的记忆张量（无法找回）">🙏</button>
+        </div>
+      </div>
+
+      <div id="habitat">
         <div id="pet-emoji">🐱</div>
-        <div id="pet-name" class="muted">还没有猫</div>
-        <div id="pet-meta" class="muted"></div>
-        <div class="meter-row"><span>饱食</span><div class="bar"><div id="bar-hunger"></div></div></div>
-        <div class="meter-row"><span>心情</span><div class="bar"><div id="bar-mood"></div></div></div>
+        <div id="bubble" class="hidden"></div>
       </div>
-      <div id="bubble" class="hidden"></div>
+
+      <div id="meters">
+        <div class="meter-row"><span>🍖 饱食</span><div class="bar"><div id="bar-hunger"></div></div></div>
+        <div class="meter-row"><span>😺 心情</span><div class="bar"><div id="bar-mood"></div></div></div>
+      </div>
+
       <div id="actions">
-        <button data-act="feed" title="喂小鱼干">🍖 喂食</button>
-        <button data-act="play" title="逗猫棒">🎾 玩耍</button>
-        <button data-act="pet" title="摸头">🫳 摸摸</button>
-        <button data-act="scold" title="责骂（后果自负）">🙀 责骂</button>
+        <button data-act="feed">🍖<span>喂食</span></button>
+        <button data-act="play">🎾<span>玩耍</span></button>
+        <button data-act="pet">🐾<span>摸摸</span></button>
+        <button data-act="scold">🙀<span>责骂</span></button>
       </div>
+
       <form id="chat-row">
         <input id="chat-input" placeholder="跟它说点什么…" maxlength="200" autocomplete="off">
-        <button type="submit">说</button>
+        <button type="submit" title="发送">➤</button>
       </form>
-      <div class="pet-tools">
-        <button id="btn-fork" title="复制此刻的大脑状态为新宠物">🧬 分身</button>
-        <button id="btn-delete" class="danger" title="放它自由（删除存档）">🙏 放归</button>
-      </div>
     </section>
 
     <aside id="diary-panel">
