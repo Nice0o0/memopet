@@ -1,14 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MemoPet · 递归状态电子宠物</title>
-  <link rel="stylesheet" href="style.css?v=0.2">
+  <script>
+    (() => {
+      const saved = localStorage.getItem("memopet-theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = saved || (prefersDark ? "dark" : "light");
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css?v=0.3">
 </head>
 <body>
   <header id="top">
     <div class="logo">memo<span>pet</span></div>
+    <button id="btn-theme" title="切换亮/暗主题" aria-label="切换亮/暗主题">🌙</button>
     <span id="status" class="dot-off" title="服务状态">●</span>
   </header>
 

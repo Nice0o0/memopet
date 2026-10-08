@@ -179,6 +179,19 @@ $("chat-row").onsubmit = (ev) => {
   interact("chat", text);
 };
 
+/* ---------- theme（与 stateswap 同款） ---------- */
+function applyThemeIcon() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  $("btn-theme").textContent = dark ? "☀️" : "🌙";
+}
+$("btn-theme").onclick = () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("memopet-theme", next);
+  applyThemeIcon();
+};
+applyThemeIcon();
+
 /* ---------- 启动 ---------- */
 (async () => {
   for (let i = 0; i < 60; i++) {
