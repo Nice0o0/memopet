@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -71,6 +73,51 @@ def create_app(model_dir: str, vocab: str, pets_dir: str,
             raise HTTPException(404, str(e))
         except ValueError as e:
             raise HTTPException(400, str(e))
+
+    @app.post("/api/pets/{pet_id}/interact/stream")
+    def interact_stream(pet_id: str, req: InteractRequest = Body(...)):
+        """SSE 流式交互：data: {"dream"/"delta"/"reply"...} 逐帧推送。"""
+        home = _home()
+        try:
+            home.get(pet_id)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+
+        def sse():
+            try:
+                for chunk in home.interact_stream(pet_id, req.action, req.text):
+                    yield "data: " + json.dumps(chunk, ensure_ascii=False) + "\n\n"
+            except ValueError as e:  # 流中途出错：以 error 帧收尾
+                yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
+
+        return StreamingResponse(sse(), media_type="text/event-stream")
+
+    @app.get("/api/pets/{pet_id}/save")
+    def export_save(pet_id: str):
+        """导出存档：这只猫的完整大脑（12.8MB 张量 + 日记），拷给朋友即送养。"""
+        home = _home()
+        pet = home.get(pet_id)
+        path = home.pets_dir / f"{pet_id}.pt"
+        if not path.is_file():
+            raise HTTPException(404, "save file not found")
+        return FileResponse(
+            path, filename=f"{pet.meta.name}.memopet.pt",
+            media_type="application/octet-stream",
+        )
+
+    @app.post("/api/pets/import")
+    async def import_save(request: Request):
+        """导入存档：raw body 放 .pt 字节（前端直接 PUT 文件内容，免 multipart 依赖）。
+        仅限可信来源——torch.load(weights_only=False) 有反序列化风险。"""
+        content = await request.body()
+        if not content:
+            raise HTTPException(400, "empty body")
+        if len(content) > 64 * 1024 * 1024:
+            raise HTTPException(400, "file too large (max 64MB)")
+        try:
+            return _home().import_save(content)
+        except Exception as e:  # noqa: BLE001 —— 格式/损坏统一 400
+            raise HTTPException(400, f"不是有效的 memopet 存档: {e}")
 
     @app.get("/api/pets/{pet_id}/diary")
     def diary(pet_id: str):

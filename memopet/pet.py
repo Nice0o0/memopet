@@ -136,6 +136,8 @@ class PetHome:
             )
 
     def _save(self, pet: MemoPet) -> None:
+        if pet.meta.pet_id not in self.pets:
+            return  # 已被放归：交互中删除的猫不回写存档（否则重启后僵尸复活）
         keys = ("recurrent_state", "conv_state", "ffn_state")
         state = {
             i: tuple(pet.cache[i][k].to("cpu") for k in keys)
@@ -244,14 +246,17 @@ class PetHome:
         }
 
     def list(self) -> list[dict]:
-        return [self.describe(p) for p in self.pets.values()]
+        with self._lock:  # 并发 create/delete 时无锁迭代会 RuntimeError
+            pets = list(self.pets.values())
+        return [self.describe(p) for p in pets]
 
     # ---------- 交互 ----------
 
-    def _generate(self, pet: MemoPet, out, prompt_ids: list[int],
-                  max_tokens: int = MAX_NEW_TOKENS) -> tuple[str, bool]:
-        """逐 token 采样（复用 stateswap 采样器），停轮条件与 stateswap 对齐：
-        \\n\\n 或幻觉出的下一轮 "User:"；停止前不再把 token 喂回状态。"""
+    def _gen_deltas(self, pet: MemoPet, out, prompt_ids: list[int],
+                    max_tokens: int = MAX_NEW_TOKENS):
+        """逐 token 采样并 yield 增量文本；停轮条件与 stateswap 对齐
+        （\\n\\n / 幻觉的 "User:"），停止前不再把 token 喂回状态。
+        截断发生在增量产生之后——流式已吐出的尾巴以最终帧为准覆盖。"""
         inc = codecs.getincrementaldecoder("utf-8")(errors="replace")
         text, recent = "", list(prompt_ids)
         with torch.no_grad():
@@ -259,26 +264,32 @@ class PetHome:
                 nxt = Engine._sample(None, out.logits[0, -1], 0.8, 0.8, recent, 1.25, 8)
                 recent.append(nxt)
                 delta = inc.decode(self.tok.id_to_bytes[nxt])
-                text += delta
+                new_text = text + delta
                 stop = False
-                if "\n\n" in text:
-                    text = text.split("\n\n")[0]
+                if "\n\n" in new_text:
+                    new_text = new_text.split("\n\n")[0]
                     stop = True
-                elif "User:" in text:
-                    # 模型没按格式另起一行就开始幻觉"下一轮"：就地截断
-                    text = text.split("User:")[0]
+                elif "User:" in new_text:
+                    new_text = new_text.split("User:")[0]
                     stop = True
-                elif text.endswith("User"):
-                    # 停止符的前缀 token：不再喂回状态
-                    text = text[: -len("User")]
+                elif new_text.endswith("User"):
+                    new_text = new_text[: -len("User")]
                     stop = True
                 if stop:
-                    return text, False
+                    if len(new_text) > len(text):
+                        yield new_text[len(text):]
+                    return
                 out = self.model(
                     input_ids=torch.tensor([[nxt]], device=self.device),
                     past_key_values=pet.cache, use_cache=True,
                 )
-        return text, False
+                if new_text != text:
+                    yield new_text[len(text):]
+                    text = new_text
+
+    def _generate(self, pet: MemoPet, out, prompt_ids: list[int],
+                  max_tokens: int = MAX_NEW_TOKENS) -> str:
+        return "".join(self._gen_deltas(pet, out, prompt_ids, max_tokens))
 
     def _dream(self, pet: MemoPet) -> str | None:
         """睡了一觉回来先做梦：梦里是当前状态生成的碎片，随后成为真实记忆
@@ -297,7 +308,7 @@ class PetHome:
                 input_ids=torch.tensor([ids], device=self.device),
                 past_key_values=pet.cache, use_cache=True,
             )
-        dream, _ = self._generate(pet, out, prompt_ids=ids, max_tokens=DREAM_TOKENS)
+        dream = self._generate(pet, out, prompt_ids=ids, max_tokens=DREAM_TOKENS)
         if len(dream) >= DEGEN_MIN_CHARS and _unique_4gram_ratio(dream) < DEGEN_MAX_UQ4:
             self._restore(pet, snap)
             return None
@@ -307,6 +318,15 @@ class PetHome:
         return dream
 
     def interact(self, pet_id: str, action: str, text: str = "") -> dict:
+        last = None
+        for chunk in self.interact_stream(pet_id, action, text):
+            last = chunk
+        return last
+
+    def interact_stream(self, pet_id: str, action: str, text: str = ""):
+        """流式交互：先 yield {"dream"}（若有），再逐字 yield {"delta"}，
+        最终帧带 {"reply", "degenerated", **describe}。退化时已流出的文本
+        由最终帧的替换文案覆盖（状态已回滚）。"""
         pet = self.get(pet_id)
         with pet.lock:
             now = time.time()
@@ -321,6 +341,8 @@ class PetHome:
             # 时间流逝的代价：不喂自然会饿、心情回归中位（作用于动作加成之前）
             if gap_hours > 0:
                 _decay_meters(pet.meta, gap_hours)
+            if dream:
+                yield {"dream": dream}
             snap = self._snapshot(pet)  # 退化护栏：本轮开始前的大脑快照
             if action == "chat":
                 user_text = (text or "").strip()[:200] or "（沉默地看着你）"
@@ -343,20 +365,38 @@ class PetHome:
                     input_ids=torch.tensor([ids], device=self.device),
                     past_key_values=pet.cache, use_cache=True,
                 )
-            reply, _ = self._generate(pet, out, prompt_ids=ids)
+            reply = ""
+            for delta in self._gen_deltas(pet, out, ids):
+                reply += delta
+                yield {"delta": delta}
             degenerated = (
                 len(reply) >= DEGEN_MIN_CHARS
                 and _unique_4gram_ratio(reply) < DEGEN_MAX_UQ4
             )
             if degenerated:
                 self._restore(pet, snap)  # 毒化内容不进长期记忆
-                return {
+                yield {
                     "reply": "（它好像走神了，咕噜咕噜说了一串听不懂的话…再试试？）",
-                    "degenerated": True, **self.describe(pet),
+                    "degenerated": True, "dream": dream, **self.describe(pet),
                 }
+                return
             for k, dv in METER_DELTA.get(action, {}).items():
                 setattr(pet.meta, k, min(1.0, max(0.0, getattr(pet.meta, k) + dv)))
             pet.meta.interactions += 1
             pet.diary.append({"t": time.time(), "label": label, "reply": reply})
             self._save(pet)
-            return {"reply": reply, "degenerated": False, "dream": dream, **self.describe(pet)}
+            yield {"reply": reply, "degenerated": False, "dream": dream, **self.describe(pet)}
+
+    def import_save(self, content: bytes) -> dict:
+        """导入存档（把朋友送的猫接回家）。注意 torch.load(weights_only=False)
+        有反序列化风险——只导入可信来源的存档（本地玩具项目，README 已注明）。"""
+        import io
+
+        payload = torch.load(io.BytesIO(content), map_location="cpu", weights_only=False)
+        meta = PetMeta(**payload["meta"])  # 缺字段即格式不符，抛 TypeError/KeyError
+        if meta.pet_id in self.pets:  # 与在住猫撞号：换新 id 入住，不覆盖原猫
+            meta.pet_id = uuid.uuid4().hex[:10]
+            payload["meta"]["pet_id"] = meta.pet_id
+        path = self.pets_dir / f"{meta.pet_id}.pt"
+        torch.save(payload, path)
+        return self.describe(self._adopt(path))

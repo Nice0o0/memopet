@@ -23,6 +23,7 @@
 | 💬 聊天 | 自由对话，近 3 件事以"回忆"形式可见 |
 | 🌙 放着不管 | 超过 6 小时（可调）再回来：先做梦，梦成为记忆；饱食度随时间下降 |
 | 🧬 分身 | 复制此刻大脑为新宠物，之后各自独立成长 |
+| ⬇️ 导出 / 📥 导入 | 存档就是这只猫本身（12.8MB `.pt`），下载送人、导入接猫回家 |
 | 🙏 放归 | 删除它的状态张量——这只猫的性格从宇宙中消失（无法找回） |
 | 领养时选人格 | 注入 stateswap 训练好的 S₀：天生猫娘 vs 白纸养成 |
 
@@ -33,7 +34,8 @@ checkout（提供 RWKV-7 权重转换、World 词表与引擎依赖）、已转�
 （`pip install -e <stateswap 目录>` 一次即可）。
 
 ```bash
-# 在 memopet 仓库根目录，复用 stateswap 的 venv：
+# 方式一：一键启动（Windows 双击 start_pet.bat，Linux: bash start_pet.sh）
+# 方式二：在 memopet 仓库根目录，复用 stateswap 的 venv：
 python -m memopet.server --port 8001
 # 打开 http://127.0.0.1:8001 —— 起个名字领养
 ```
@@ -71,14 +73,16 @@ curl -X POST localhost:8001/api/pets/<id>/interact -H "Content-Type: application
   -d '{"action":"feed"}'
 ```
 
-其余端点：`GET /api/pets` · `GET /api/personas` · `POST /api/pets/{id}/fork` ·
-`DELETE /api/pets/{id}` · `GET /api/pets/{id}/diary`
+其余端点：`GET /api/pets` · `GET /api/personas` · `POST /api/pets/{id}/interact/stream`
+（SSE 逐字流式）· `POST /api/pets/{id}/fork` · `GET /api/pets/{id}/save`（导出）·
+`POST /api/pets/import`（导入，raw body 放 .pt 字节，仅限可信来源）·
+`DELETE /api/pets/{id}`
 
 ## Roadmap
 
 - [x] 出生人格：领养时注入训练好的 S₀（neko 系开箱即猫娘；factory 定制专属语料待 LLM key）
 - [x] 梦机制：隔太久回来先做梦，梦写进状态成为记忆
-- [ ] 存档导出/导入（把分身送给朋友）
+- [x] 存档导出/导入（把分身送给朋友）
 - [ ] 0.4B 档位（手机/核显也能养）
 
 ## 致谢

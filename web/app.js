@@ -54,47 +54,61 @@ async function loadSlots() {
 
 /* ---------- 舞台 ---------- */
 /* 手绘 SVG 小猫：随心情变表情（开心眯眼 / 正常圆眼 / 难过垂眼），
-   项圈用品牌蓝紫色，跨亮暗主题通用。 */
-function catSvg(mood) {
+   项圈用品牌蓝紫色；dim=true 为灰调版（空状态）。 */
+function catSvg(mood, dim = false) {
+  const C = dim
+    ? { body: "#b9bdc6", inner: "#dadde2", dark: "#83878f", nose: "#a9a29b",
+        bell: "#c9cdd4", collar: "#9aa0a8", tail: "#aeb2ba" }
+    : { body: "#f7b955", inner: "#f2a0a0", dark: "#4a3520", nose: "#d16c6c",
+        bell: "#ffd34d", collar: "#5b74ff", tail: "#f0a53e" };
   const eyes = mood === "happy"
-    ? '<path d="M36 40 q4 -5 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
-      + '<path d="M52 40 q4 -5 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
+    ? `<path d="M36 40 q4 -5 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
+      + `<path d="M52 40 q4 -5 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
     : mood === "sad"
-    ? '<path d="M36 43 q4 4 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
-      + '<path d="M52 43 q4 4 8 0" stroke="#4a3520" stroke-width="2.6" fill="none" stroke-linecap="round"/>'
-    : '<circle cx="40" cy="40" r="3.1" fill="#4a3520"/><circle cx="56" cy="40" r="3.1" fill="#4a3520"/>';
+    ? `<path d="M36 43 q4 4 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
+      + `<path d="M52 43 q4 4 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
+    : `<circle cx="40" cy="40" r="3.1" fill="${C.dark}"/><circle cx="56" cy="40" r="3.1" fill="${C.dark}"/>`;
   const mouth = mood === "happy"
-    ? '<path d="M42 50 q6 7 12 0" stroke="#4a3520" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
+    ? `<path d="M42 50 q6 7 12 0" stroke="${C.dark}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
     : mood === "sad"
-    ? '<path d="M44 54 q4 -3.5 8 0" stroke="#4a3520" stroke-width="2.2" fill="none" stroke-linecap="round"/>'
-    : '<path d="M44 51 q4 3 8 0" stroke="#4a3520" stroke-width="2.2" fill="none" stroke-linecap="round"/>';
+    ? `<path d="M44 54 q4 -3.5 8 0" stroke="${C.dark}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
+    : `<path d="M44 51 q4 3 8 0" stroke="${C.dark}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
   const ears = mood === "sad"
-    ? '<polygon points="29,27 20,10 40,19" fill="#f7b955"/><polygon points="67,27 76,10 56,19" fill="#f7b955"/>'
-    : '<polygon points="30,26 24,5 43,17" fill="#f7b955"/><polygon points="66,26 72,5 53,17" fill="#f7b955"/>';
+    ? `<polygon points="29,27 20,10 40,19" fill="${C.body}"/><polygon points="67,27 76,10 56,19" fill="${C.body}"/>`
+    : `<polygon points="30,26 24,5 43,17" fill="${C.body}"/><polygon points="66,26 72,5 53,17" fill="${C.body}"/>`;
   return `<svg viewBox="0 0 96 96" width="112" height="112" aria-hidden="true">
-    <path d="M26 76 q -15 2 -13 -15 q 1 -9 9 -9" stroke="#f0a53e" stroke-width="6" fill="none" stroke-linecap="round"/>
-    <ellipse cx="48" cy="72" rx="26" ry="17" fill="#f7b955"/>
+    <path d="M26 76 q -15 2 -13 -15 q 1 -9 9 -9" stroke="${C.tail}" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <ellipse cx="48" cy="72" rx="26" ry="17" fill="${C.body}"/>
     ${ears}
-    <polygon points="32.5,23.5 28.5,12 39,19" fill="#f2a0a0" opacity="0.9"/>
-    <polygon points="63.5,23.5 67.5,12 57,19" fill="#f2a0a0" opacity="0.9"/>
-    <circle cx="48" cy="41" r="24" fill="#f7b955"/>
-    <ellipse cx="35" cy="48" rx="4" ry="2.4" fill="#f2a0a0" opacity="0.55"/>
-    <ellipse cx="61" cy="48" rx="4" ry="2.4" fill="#f2a0a0" opacity="0.55"/>
+    <polygon points="32.5,23.5 28.5,12 39,19" fill="${C.inner}" opacity="0.9"/>
+    <polygon points="63.5,23.5 67.5,12 57,19" fill="${C.inner}" opacity="0.9"/>
+    <circle cx="48" cy="41" r="24" fill="${C.body}"/>
+    <ellipse cx="35" cy="48" rx="4" ry="2.4" fill="${C.inner}" opacity="0.55"/>
+    <ellipse cx="61" cy="48" rx="4" ry="2.4" fill="${C.inner}" opacity="0.55"/>
     ${eyes}
-    <polygon points="45.5,46 50.5,46 48,49" fill="#d16c6c"/>
+    <polygon points="45.5,46 50.5,46 48,49" fill="${C.nose}"/>
     ${mouth}
-    <g stroke="#c8933a" stroke-width="1.4" stroke-linecap="round" opacity="0.8">
+    <g stroke="${C.tail}" stroke-width="1.4" stroke-linecap="round" opacity="0.8">
       <line x1="28" y1="45" x2="15" y2="42"/><line x1="28" y1="49" x2="15" y2="50"/>
       <line x1="68" y1="45" x2="81" y2="42"/><line x1="68" y1="49" x2="81" y2="50"/>
     </g>
-    <path d="M26 63 q22 10 44 0 l 0 5 q -22 10 -44 0 z" fill="#5b74ff"/>
-    <circle cx="48" cy="70.5" r="3.4" fill="#ffd34d" stroke="#c8933a" stroke-width="1"/>
-    <line x1="46" y1="70" x2="50" y2="71" stroke="#c8933a" stroke-width="1"/>
+    <path d="M26 63 q22 10 44 0 l 0 5 q -22 10 -44 0 z" fill="${C.collar}"/>
+    <circle cx="48" cy="70.5" r="3.4" fill="${C.bell}" stroke="${C.tail}" stroke-width="1"/>
+    <line x1="46" y1="70" x2="50" y2="71" stroke="${C.tail}" stroke-width="1"/>
   </svg>`;
 }
 
 function renderCat(mood) {
   $("pet-emoji").innerHTML = catSvg(mood);
+}
+
+function renderEmptyStage() {
+  $("pet-emoji").innerHTML = catSvg("normal", true);
+  $("pet-name").textContent = "还没有猫";
+  $("pet-meta").textContent = "起个名字，领一只回家吧";
+  $("bar-hunger").style.width = "0%";
+  $("bar-mood").style.width = "0%";
+  $("bubble").classList.add("hidden");
 }
 
 function renderPet(p) {
@@ -136,25 +150,55 @@ async function loadDiary() {
   }
 }
 
-/* ---------- 交互 ---------- */
+/* ---------- 交互（SSE 流式） ---------- */
 async function interact(action, text = "") {
   if (!activeId || busy) return;
   busy = true;
   document.querySelectorAll("#actions button, #chat-row button").forEach((b) => (b.disabled = true));
+  const myPet = activeId; // 生成期间可能切换宠物：回应只属于发起它的猫
   const bubble = $("bubble");
   bubble.classList.remove("hidden");
   bubble.textContent = "…";
+  // 生成期间切走了宠物就不再写舞台（只刷新列表），避免 A 猫的话出现在 B 猫的气泡里
+  const show = (t) => { if (activeId === myPet) bubble.textContent = t; };
+  let dreamText = null, acc = "";
+  const withDream = (t) => (dreamText ? `🌙 它刚睡醒，梦到了：${dreamText}\n\n${t}` : t);
   try {
-    const r = await api(`/api/pets/${activeId}/interact`, {
+    const res = await fetch(`/api/pets/${myPet}/interact/stream`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, text }),
     });
-    bubble.textContent = r.dream ? `🌙 它刚睡醒，梦到了：${r.dream}\n\n${r.reply}` : r.reply;
-    renderPet(r);
-    await loadSlots();
-    await loadDiary();
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const events = buf.split("\n\n");
+      buf = events.pop(); // 末尾可能是不完整事件，留给下一次 read 拼齐
+      for (const chunk of events) {
+        const line = chunk.trim();
+        if (!line.startsWith("data: ")) continue;
+        const p = JSON.parse(line.slice(6));
+        if (p.error) throw new Error(p.error);
+        if (p.dream) { dreamText = p.dream; show(`🌙 它刚睡醒，梦到了：${p.dream}\n\n`); }
+        if (p.delta) { acc += p.delta; show(withDream(acc)); }
+        if (p.reply !== undefined) {
+          acc = p.reply; // 最终帧（含退化替换文案）以它为准
+          show(withDream(acc));
+          if (activeId === myPet) {
+            renderPet(p);
+            await loadDiary();
+          }
+          await loadSlots();
+        }
+      }
+    }
   } catch (e) {
-    bubble.textContent = `⚠ ${e.message}`;
+    show(`⚠ ${e.message}`);
   } finally {
     busy = false;
     document.querySelectorAll("#actions button, #chat-row button").forEach((b) => (b.disabled = false));
@@ -204,11 +248,27 @@ $("btn-delete").onclick = async () => {
   if (!confirm("放归这只猫？它的记忆张量将被删除，无法找回。")) return;
   await api(`/api/pets/${activeId}`, { method: "DELETE" });
   activeId = null;
-  $("pet-name").textContent = "还没有猫";
-  $("pet-meta").textContent = "";
-  $("bubble").classList.add("hidden");
+  renderEmptyStage();
   $("diary-list").innerHTML = "";
   await loadSlots();
+};
+
+/* ---------- 存档导出 / 导入（把猫送给朋友） ---------- */
+$("btn-export").onclick = () => {
+  if (activeId) window.open(`/api/pets/${activeId}/save`, "_blank");
+};
+$("btn-import").onclick = () => $("import-file").click();
+$("import-file").onchange = async (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  try {
+    const res = await fetch("/api/pets/import", { method: "POST", body: await f.arrayBuffer() });
+    if (!res.ok) throw new Error((await res.json()).detail || "导入失败");
+    const p = await res.json();
+    ev.target.value = "";
+    await loadSlots();
+    await selectPet(p.pet_id);
+  } catch (e) { alert(e.message); ev.target.value = ""; }
 };
 
 /* ---------- 事件绑定 ---------- */
@@ -250,4 +310,5 @@ applyThemeIcon();
   await loadPersonas();
   const pets = await loadSlots();
   if (pets.length) await selectPet(pets[0].pet_id);
+  else renderEmptyStage();
 })();

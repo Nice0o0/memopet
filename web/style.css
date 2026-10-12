@@ -132,6 +132,13 @@ aside, #stage-panel {
   flex-wrap: wrap;
 }
 .create-row input { flex: 1; min-width: 88px; }
+.create-row button.ghost {
+  background: none;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  font-weight: 500;
+}
+.create-row button.ghost:hover { border-color: var(--accent); color: var(--accent); filter: none; }
 
 input, select {
   background: var(--bg);
