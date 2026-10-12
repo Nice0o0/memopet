@@ -17,3 +17,5 @@ jobs:
         run: |
           pip install ruff
           ruff check memopet
+      - name: Compile check
+        run: python -m compileall memopet
