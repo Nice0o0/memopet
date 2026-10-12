@@ -53,48 +53,69 @@ async function loadSlots() {
 }
 
 /* ---------- 舞台 ---------- */
-/* 手绘 SVG 小猫：随心情变表情（开心眯眼 / 正常圆眼 / 难过垂眼），
-   项圈用品牌蓝紫色；dim=true 为灰调版（空状态）。 */
+/* 手绘二次元小猫：chibi 比例、渐变虹膜大眼（带高光）、ω 猫嘴、腮红、
+   会摇的呆毛；心情三态（开心眯眼 / 常态 / 难过含泪）；dim=true 灰调版。 */
 function catSvg(mood, dim = false) {
   const C = dim
-    ? { body: "#b9bdc6", inner: "#dadde2", dark: "#83878f", nose: "#a9a29b",
-        bell: "#c9cdd4", collar: "#9aa0a8", tail: "#aeb2ba" }
-    : { body: "#f7b955", inner: "#f2a0a0", dark: "#4a3520", nose: "#d16c6c",
-        bell: "#ffd34d", collar: "#5b74ff", tail: "#f0a53e" };
+    ? { cream: "#c3c7ce", ginger: "#a9adb5", lash: "#6f737b", nose: "#a9a29b",
+        irisA: "#d7dade", irisB: "#b9bdc4", blush: "#dadde2", tear: "#cfe0ee",
+        bell: "#c9cdd4", collar: "#9aa0a8", whisker: "#b6bac2" }
+    : { cream: "#ffe9c9", ginger: "#f4a259", lash: "#4a3520", nose: "#e88a8a",
+        irisA: "#ffd27a", irisB: "#ef8b32", blush: "#ffb3ba", tear: "#a5d8ff",
+        bell: "#ffd34d", collar: "#5b74ff", whisker: "#e3b877" };
+  const eye = (cx) => `
+      <path d="M${cx - 6} 36.5 q6 -5.5 12 0" stroke="${C.lash}" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <ellipse cx="${cx}" cy="43" rx="5.4" ry="6.8" fill="url(#irisGrad)"/>
+      <ellipse cx="${cx}" cy="44.6" rx="2.1" ry="4.2" fill="${C.lash}"/>
+      <circle cx="${cx - 2.2}" cy="40.4" r="1.9" fill="#fff"/>
+      <circle cx="${cx + 2.4}" cy="46.6" r="0.9" fill="#fff" opacity="0.85"/>`;
   const eyes = mood === "happy"
-    ? `<path d="M36 40 q4 -5 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
-      + `<path d="M52 40 q4 -5 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
+    ? `<path d="M30 43 q6 -7 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>
+       <path d="M54 43 q6 -7 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>`
     : mood === "sad"
-    ? `<path d="M36 43 q4 4 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
-      + `<path d="M52 43 q4 4 8 0" stroke="${C.dark}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
-    : `<circle cx="40" cy="40" r="3.1" fill="${C.dark}"/><circle cx="56" cy="40" r="3.1" fill="${C.dark}"/>`;
+    ? `<path d="M30 45 q6 5 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>
+       <path d="M54 45 q6 5 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>
+       <path d="M62.5 50 q2.6 3.6 0 5.2 q-2.6 -1.6 0 -5.2" fill="${C.tear}"/>`
+    : `<g class="cat-eyes">${eye(36)}${eye(60)}</g>`;
   const mouth = mood === "happy"
-    ? `<path d="M42 50 q6 7 12 0" stroke="${C.dark}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
+    ? `<path d="M44.2 52.2 q3.8 5 7.6 0 z" fill="${C.lash}"/>
+       <ellipse cx="48" cy="54.6" rx="1.9" ry="1.1" fill="#ff9aa2"/>`
     : mood === "sad"
-    ? `<path d="M44 54 q4 -3.5 8 0" stroke="${C.dark}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
-    : `<path d="M44 51 q4 3 8 0" stroke="${C.dark}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+    ? `<path d="M45 55 q3 -2.6 6 0" stroke="${C.lash}" stroke-width="2" fill="none" stroke-linecap="round"/>`
+    : `<path d="M44.2 52.6 q1.9 2.6 3.8 0 q1.9 2.6 3.8 0" stroke="${C.lash}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
   const ears = mood === "sad"
-    ? `<polygon points="29,27 20,10 40,19" fill="${C.body}"/><polygon points="67,27 76,10 56,19" fill="${C.body}"/>`
-    : `<polygon points="30,26 24,5 43,17" fill="${C.body}"/><polygon points="66,26 72,5 53,17" fill="${C.body}"/>`;
-  return `<svg viewBox="0 0 96 96" width="112" height="112" aria-hidden="true">
-    <path d="M26 76 q -15 2 -13 -15 q 1 -9 9 -9" stroke="${C.tail}" stroke-width="6" fill="none" stroke-linecap="round"/>
-    <ellipse cx="48" cy="72" rx="26" ry="17" fill="${C.body}"/>
+    ? `<path d="M28 32 Q 19 12 35 17 Q 41 20 45 23 Z" fill="${C.ginger}"/>
+       <path d="M68 32 Q 77 12 61 17 Q 55 20 51 23 Z" fill="${C.ginger}"/>`
+    : `<path d="M28 30 Q 18 7 35 13 Q 41 16 45 20 Z" fill="${C.ginger}"/>
+       <path d="M68 30 Q 78 7 61 13 Q 55 16 51 20 Z" fill="${C.ginger}"/>`;
+  return `<svg viewBox="0 0 96 96" width="118" height="118" aria-hidden="true">
+    <defs>
+      <linearGradient id="irisGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${C.irisA}"/>
+        <stop offset="1" stop-color="${C.irisB}"/>
+      </linearGradient>
+    </defs>
+    <path d="M67 73 q 17 4 15 -12 q -1.5 -8.5 -10.5 -8.5" fill="none" stroke="${C.ginger}" stroke-width="8" stroke-linecap="round"/>
+    <ellipse cx="48" cy="73" rx="21" ry="14" fill="${C.cream}"/>
+    <ellipse cx="40" cy="82.5" rx="5" ry="3.2" fill="${C.cream}"/>
+    <ellipse cx="56" cy="82.5" rx="5" ry="3.2" fill="${C.cream}"/>
     ${ears}
-    <polygon points="32.5,23.5 28.5,12 39,19" fill="${C.inner}" opacity="0.9"/>
-    <polygon points="63.5,23.5 67.5,12 57,19" fill="${C.inner}" opacity="0.9"/>
-    <circle cx="48" cy="41" r="24" fill="${C.body}"/>
-    <ellipse cx="35" cy="48" rx="4" ry="2.4" fill="${C.inner}" opacity="0.55"/>
-    <ellipse cx="61" cy="48" rx="4" ry="2.4" fill="${C.inner}" opacity="0.55"/>
+    <path d="M31 27 Q 26 16 35 19 Q 39 21 41 23 Z" fill="${C.blush}" opacity="0.9"/>
+    <path d="M65 27 Q 70 16 61 19 Q 57 21 55 23 Z" fill="${C.blush}" opacity="0.9"/>
+    <path class="ahoge" d="M47 12 q 3.5 -8 9.5 -6.5 q -5.5 2 -4 8" fill="none" stroke="${C.ginger}" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="48" cy="41" r="26" fill="${C.cream}"/>
+    <ellipse cx="30.5" cy="49.5" rx="5" ry="2.8" fill="${C.blush}" opacity="0.65"/>
+    <ellipse cx="65.5" cy="49.5" rx="5" ry="2.8" fill="${C.blush}" opacity="0.65"/>
     ${eyes}
-    <polygon points="45.5,46 50.5,46 48,49" fill="${C.nose}"/>
+    <polygon points="46.3,50 49.7,50 48,52.2" fill="${C.nose}"/>
     ${mouth}
-    <g stroke="${C.tail}" stroke-width="1.4" stroke-linecap="round" opacity="0.8">
-      <line x1="28" y1="45" x2="15" y2="42"/><line x1="28" y1="49" x2="15" y2="50"/>
-      <line x1="68" y1="45" x2="81" y2="42"/><line x1="68" y1="49" x2="81" y2="50"/>
+    <g stroke="${C.whisker}" stroke-width="1.3" stroke-linecap="round" opacity="0.9">
+      <line x1="26" y1="46" x2="14" y2="43"/><line x1="26" y1="50" x2="14" y2="51"/>
+      <line x1="70" y1="46" x2="82" y2="43"/><line x1="70" y1="50" x2="82" y2="51"/>
     </g>
-    <path d="M26 63 q22 10 44 0 l 0 5 q -22 10 -44 0 z" fill="${C.collar}"/>
-    <circle cx="48" cy="70.5" r="3.4" fill="${C.bell}" stroke="${C.tail}" stroke-width="1"/>
-    <line x1="46" y1="70" x2="50" y2="71" stroke="${C.tail}" stroke-width="1"/>
+    <path d="M28 62.5 q20 9 40 0 l0 5 q-20 9 -40 0 z" fill="${C.collar}"/>
+    <circle cx="48" cy="70" r="3.6" fill="${C.bell}" stroke="${C.whisker}" stroke-width="1"/>
+    <line x1="46" y1="69.5" x2="50" y2="70.5" stroke="${C.whisker}" stroke-width="1"/>
   </svg>`;
 }
 

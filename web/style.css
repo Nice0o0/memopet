@@ -230,6 +230,25 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   animation: bounce 2.6s ease-in-out infinite;
 }
 #pet-emoji svg { display: block; }
+/* 二次元小猫的活物感：呆毛摇 + 眨眼 */
+.ahoge {
+  transform-box: fill-box;
+  transform-origin: 20% 100%;
+  animation: sway 3.4s ease-in-out infinite;
+}
+@keyframes sway {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(7deg); }
+}
+.cat-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 4.8s infinite;
+}
+@keyframes blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.06); }
+}
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-9px); }
