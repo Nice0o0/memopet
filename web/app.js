@@ -130,6 +130,7 @@ function renderEmptyStage() {
   $("bar-hunger").style.width = "0%";
   $("bar-mood").style.width = "0%";
   $("bubble").classList.add("hidden");
+  $("growth").classList.add("hidden");
 }
 
 function renderPet(p) {
@@ -143,6 +144,7 @@ function renderPet(p) {
 
 async function selectPet(id) {
   activeId = id;
+  $("growth").classList.add("hidden"); // 成长面板随宠物切换收起
   const pets = await loadSlots();
   const p = pets.find((x) => x.pet_id === id);
   if (p) {
@@ -150,6 +152,63 @@ async function selectPet(id) {
     await loadDiary();
   }
 }
+
+/* ---------- 成长档案（当前大脑 vs 出生大脑的逐层余弦） ---------- */
+async function toggleGrowth() {
+  const box = $("growth");
+  if (!activeId) return;
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  try {
+    const d = await api(`/api/pets/${activeId}/growth`);
+    box.classList.remove("hidden");
+    const bars = $("growth-bars");
+    bars.innerHTML = "";
+    if (!d.layers || !d.layers.length) {
+      $("growth-summary").textContent = d.note || "出生大脑未记录";
+      return;
+    }
+    const min = Math.min(...d.layers.map((l) => l.cos));
+    const max = Math.max(...d.layers.map((l) => l.cos));
+    for (const l of d.layers) {
+      const cell = document.createElement("div");
+      cell.className = "growth-cell";
+      const t = max - min > 1e-6 ? (l.cos - min) / (max - min) : 1;
+      cell.style.height = `${10 + Math.round(t * 34)}px`;
+      cell.style.background = `rgba(91, 116, 255, ${0.18 + (1 - t) * 0.82})`;
+      cell.title = `L${l.i} · cos ${l.cos}`;
+      bars.appendChild(cell);
+    }
+    $("growth-summary").textContent =
+      `平均相似 ${d.mean_cos}（1.0 = 完全没变）· 越低说明这一层被经历改变得越多`;
+  } catch (e) {
+    $("growth-summary").textContent = `⚠ ${e.message}`;
+  }
+}
+$("btn-growth").onclick = toggleGrowth;
+
+/* ---------- 时光倒流：回到最近一次自动存档 ---------- */
+$("btn-timetravel").onclick = async () => {
+  if (!activeId) return;
+  try {
+    const { snapshots } = await api(`/api/pets/${activeId}/snapshots`);
+    if (!snapshots.length) {
+      alert("还没有自动存档——相处满一天后会自动存一份。");
+      return;
+    }
+    const s = snapshots[0];
+    if (!confirm(`回到 ${s.when} 的状态？这之后发生的事会被覆盖（日记也会回退）。`)) return;
+    const r = await api(`/api/pets/${activeId}/restore`, {
+      method: "POST",
+      body: JSON.stringify({ ts: s.ts }),
+    });
+    renderPet(r);
+    await loadSlots();
+    await loadDiary();
+    const bubble = $("bubble");
+    bubble.classList.remove("hidden");
+    bubble.textContent = `🕰️ 已回到 ${s.when}。`;
+  } catch (e) { alert(e.message); }
+};
 
 /* ---------- 日记 ---------- */
 async function loadDiary() {
@@ -181,7 +240,11 @@ async function interact(action, text = "") {
   bubble.classList.remove("hidden");
   bubble.textContent = "…";
   // 生成期间切走了宠物就不再写舞台（只刷新列表），避免 A 猫的话出现在 B 猫的气泡里
-  const show = (t) => { if (activeId === myPet) bubble.textContent = t; };
+  const show = (t) => {
+    if (activeId !== myPet) return;
+    bubble.textContent = t;
+    bubble.scrollTop = bubble.scrollHeight; // 限高后自动跟到最新一行
+  };
   let dreamText = null, acc = "";
   const withDream = (t) => (dreamText ? `🌙 它刚睡醒，梦到了：${dreamText}\n\n${t}` : t);
   try {

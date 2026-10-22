@@ -5,11 +5,13 @@
 KV-cache 模型做不了这个玩具：它的"记忆"随对话长度无限膨胀且绑定 token 位置。
 
 复用 stateswap 的底座加载 / 分词器 / 采样器 / 退化护栏；游戏逻辑独立。
+纯逻辑（停轮规则/衰减/人格过滤）在 rules.py，可脱离 GPU 单测。
 """
 
 from __future__ import annotations
 
 import codecs
+import random
 import threading
 import time
 import uuid
@@ -18,66 +20,42 @@ from pathlib import Path
 
 import torch
 from stateswap.engine import Engine, _unique_4gram_ratio
+from stateswap.lowrank import lowrank_reconstruct, svd_truncate
 from stateswap.s0 import S0, load_base_model, load_s0_payload, make_cache
 from stateswap.tokenizer import load_tokenizer
 
-MAX_NEW_TOKENS = 96
-DREAM_TOKENS = 64
-REPLAY_EVENTS = 3  # 近事以可见文本重放（1.5B 状态事实保持弱，stateswap 工程结论）
-DEGEN_MIN_CHARS = 120
-DEGEN_MAX_UQ4 = 0.72
-DIARY_MAX = 500  # 日记上限：存档与 /diary 端点都随此封顶
-DECAY_HUNGER_PER_HOUR = 0.02  # 时间流逝的代价：不喂自然会饿
-DECAY_MOOD_DRIFT_PER_HOUR = 0.02  # 心情每小时向中位回归 2%
+from .rules import (
+    ACTION_LABELS,
+    AUTO_SNAPSHOT_HOURS,
+    DEGEN_MAX_UQ4,
+    DEGEN_MIN_CHARS,
+    DREAM_OPENERS,
+    DREAM_TOKENS,
+    MAX_LOADED,
+    MAX_NEW_TOKENS,
+    MAX_SNAPSHOTS,
+    METER_DELTA,
+    REPLAY_EVENTS,
+    PetMeta,
+    apply_stop,
+    backfill_meta,
+    decay_meters,
+    discover_personas,
+    dream_prompt,
+    meters_hint,
+    trim_diary,
+)
 
-ACTION_LABELS = {
-    "feed": "主人往你碗里倒了一把小鱼干",
-    "play": "主人拿出逗猫棒，在空中晃来晃去逗你",
-    "pet": "主人轻轻摸了摸你的头和下巴",
-    "scold": "主人板着脸，皱着眉责骂了你",
-}
-METER_DELTA = {
-    "feed": {"hunger": +0.25, "mood": +0.05},
-    "play": {"hunger": -0.05, "mood": +0.20},
-    "pet": {"mood": +0.15},
-    "scold": {"mood": -0.25},
-    "chat": {"mood": +0.03},
-}
-
-
-@dataclass
-class PetMeta:
-    pet_id: str
-    name: str
-    born_at: float
-    interactions: int = 0
-    hunger: float = 0.55  # 0~1，越高越饱
-    mood: float = 0.55
-    persona_id: str = "none"  # 出生大脑来自哪个 S0（none = 冷启动白纸）
-    last_seen: float = 0.0  # 上次互动时间；间隔超过梦阈值则先"做梦"
-    dreams: int = 0
+_STATE_KEYS = ("recurrent_state", "conv_state", "ffn_state")
 
 
 @dataclass
 class MemoPet:
     meta: PetMeta
-    cache: object  # fla Cache：递归状态就是这只猫的大脑
+    cache: object | None  # fla Cache：递归状态就是这只猫的大脑（None = 已卸载到 CPU）
     diary: list = field(default_factory=list)
+    parked: dict | None = None  # {layer_idx: (rec, conv, ffn)} on CPU
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
-
-
-def _meters_hint(meta: PetMeta) -> str:
-    def word(v: float, low: str, high: str) -> str:
-        return low if v < 0.35 else (high if v > 0.7 else "还行")
-
-    return f"（你现在的身体感受：肚子{word(meta.hunger, '很饿', '很饱')}，心情{word(meta.mood, '低落', '很好')}）"
-
-
-def _decay_meters(meta: PetMeta, gap_hours: float) -> None:
-    """时间流逝的代价：饿意随小时累积，心情缓慢回归中位——
-    不回来玩它，它是真的会饿坏的。"""
-    meta.hunger = max(0.0, meta.hunger - gap_hours * DECAY_HUNGER_PER_HOUR)
-    meta.mood += (0.5 - meta.mood) * min(1.0, gap_hours * DECAY_MOOD_DRIFT_PER_HOUR)
 
 
 class PetHome:
@@ -91,18 +69,14 @@ class PetHome:
         self.device = device
         self.pets_dir = Path(pets_dir)
         self.pets_dir.mkdir(parents=True, exist_ok=True)
+        self.births_dir = self.pets_dir / "births"
+        self.births_dir.mkdir(exist_ok=True)
+        self.snapshots_dir = self.pets_dir / "snapshots"
+        self.snapshots_dir.mkdir(exist_ok=True)
         self.dream_gap_sec = max(0.0, dream_gap_hours) * 3600
-        # 可选出生人格：{id: s0 文件路径}，创建宠物时注入初始状态。
-        # 过滤任务/实验人格：zh2en 会把一切翻译成英文；mem-/mix-/scaling- 是
-        # 研究产物——否则能领养出"只会翻译、不能聊天"的猫（stateswap 分组教训）
-        self.personas: dict[str, Path | None] = {"none": None}
-        if s0_dir and Path(s0_dir).exists():
-            for f in sorted(Path(s0_dir).glob("*/s0.pt")):
-                pid = f.parent.name
-                if pid.startswith(("zh2en", "mem-", "mix-", "scaling-")):
-                    continue
-                self.personas[pid] = f
+        self.personas = discover_personas(s0_dir)
         self.pets: dict[str, MemoPet] = {}
+        self._loaded: list[str] = []  # GPU 常驻 LRU（设备上的顺序）
         self._lock = threading.Lock()
         for f in sorted(self.pets_dir.glob("*.pt")):
             try:
@@ -110,23 +84,63 @@ class PetHome:
             except Exception as e:  # noqa: BLE001
                 print(f"[memopet] 跳过损坏存档 {f.name}: {e}")
 
-    # ---------- 存档 I/O ----------
+    # ---------- 状态装载 / 卸载（LRU） ----------
 
     def _blank_cache(self, s0_path: Path | None = None):
         holder = S0(self.model).to(self.device)
         if s0_path is not None:
-            # 出生人格：以训练好的 S0 作为初始大脑（非零冷启动）
             holder.load_stacked(load_s0_payload(torch.load(s0_path, map_location="cpu", weights_only=False)))
         return make_cache(self.model, holder, detach_states=True)
 
+    def _ensure_gpu(self, pet: MemoPet) -> None:
+        if pet.cache is not None:
+            self._touch(pet.meta.pet_id)
+            return
+        pet.cache = self._blank_cache()
+        for i, (rec, conv, ffn) in (pet.parked or {}).items():
+            pet.cache.update(
+                recurrent_state=rec.to(self.device),
+                conv_state=conv.to(self.device),
+                ffn_state=ffn.to(self.device),
+                layer_idx=int(i), offset=0,
+            )
+        pet.parked = None
+        self._touch(pet.meta.pet_id)
+
+    def _touch(self, pid: str) -> None:
+        with self._lock:
+            if pid in self._loaded:
+                self._loaded.remove(pid)
+            self._loaded.append(pid)
+            while len(self._loaded) > MAX_LOADED:
+                old = self._loaded.pop(0)
+                p = self.pets.get(old)
+                if p is None or p.cache is None or old == pid:
+                    continue
+                if p.lock.acquire(blocking=False):  # 正在交互的猫不卸载
+                    try:
+                        self._park(p)
+                    finally:
+                        p.lock.release()
+
+    def _park(self, pet: MemoPet) -> None:
+        pet.parked = {
+            i: tuple(pet.cache[i][k].to("cpu") for k in _STATE_KEYS)
+            for i in range(self.model.config.num_hidden_layers)
+        }
+        pet.cache = None
+
+    # ---------- 存档 I/O ----------
+
     def _snapshot(self, pet: MemoPet) -> list:
-        keys = ("recurrent_state", "conv_state", "ffn_state")
+        self._ensure_gpu(pet)
         return [
-            tuple(pet.cache[i][k].to("cpu") for k in keys)
+            tuple(pet.cache[i][k].to("cpu") for k in _STATE_KEYS)
             for i in range(self.model.config.num_hidden_layers)
         ]
 
     def _restore(self, pet: MemoPet, snap: list) -> None:
+        pet.cache = self._blank_cache()
         for i, (rec, conv, ffn) in enumerate(snap):
             pet.cache.update(
                 recurrent_state=rec.to(self.device),
@@ -134,36 +148,30 @@ class PetHome:
                 ffn_state=ffn.to(self.device),
                 layer_idx=i, offset=0,
             )
+        pet.parked = None
+        self._touch(pet.meta.pet_id)
+
+    def _payload(self, pet: MemoPet) -> dict:
+        if pet.cache is not None:
+            state = {
+                i: tuple(pet.cache[i][k].to("cpu") for k in _STATE_KEYS)
+                for i in range(self.model.config.num_hidden_layers)
+            }
+        else:
+            state = pet.parked or {}
+        return {"meta": asdict(pet.meta), "diary": trim_diary(pet.diary), "state": state}
 
     def _save(self, pet: MemoPet) -> None:
         if pet.meta.pet_id not in self.pets:
             return  # 已被放归：交互中删除的猫不回写存档（否则重启后僵尸复活）
-        keys = ("recurrent_state", "conv_state", "ffn_state")
-        state = {
-            i: tuple(pet.cache[i][k].to("cpu") for k in keys)
-            for i in range(self.model.config.num_hidden_layers)
-        }
-        if len(pet.diary) > DIARY_MAX:
-            pet.diary = pet.diary[-DIARY_MAX:]
-        payload = {"meta": asdict(pet.meta), "diary": pet.diary, "state": state}
         tmp = self.pets_dir / f".{pet.meta.pet_id}.pt.tmp"
-        torch.save(payload, tmp)
+        torch.save(self._payload(pet), tmp)
         tmp.replace(self.pets_dir / f"{pet.meta.pet_id}.pt")
 
     def _adopt(self, path: Path) -> MemoPet:
         payload = torch.load(path, map_location="cpu", weights_only=False)
-        meta = PetMeta(**payload["meta"])
-        if meta.last_seen == 0:
-            # 旧存档没有 last_seen 字段：回填出生时间，否则做梦条件永远不满足
-            meta.last_seen = meta.born_at
-        pet = MemoPet(meta=meta, cache=self._blank_cache(), diary=payload["diary"])
-        for i, (rec, conv, ffn) in payload["state"].items():
-            pet.cache.update(
-                recurrent_state=rec.to(self.device),
-                conv_state=conv.to(self.device),
-                ffn_state=ffn.to(self.device),
-                layer_idx=int(i), offset=0,
-            )
+        meta = backfill_meta(payload["meta"])
+        pet = MemoPet(meta=meta, cache=None, diary=payload["diary"], parked=payload["state"])
         self.pets[meta.pet_id] = pet
         return pet
 
@@ -176,6 +184,9 @@ class PetHome:
         s0_path = self.personas.get(persona_id)
         if persona_id != "none" and s0_path is None:
             raise ValueError(f"unknown persona {persona_id}")
+        with self._lock:
+            if len(self.pets) >= 30:
+                raise ValueError("猫窝满了（最多 30 只）——先放归几只吧")
         meta = PetMeta(pet_id=uuid.uuid4().hex[:10], name=name, born_at=time.time(),
                        persona_id=persona_id, last_seen=time.time())
         pet = MemoPet(meta=meta, cache=self._blank_cache(s0_path))
@@ -193,12 +204,39 @@ class PetHome:
                 input_ids=torch.tensor([ids], device=self.device),
                 past_key_values=pet.cache, use_cache=True,
             )
-        reply, _ = self._generate(pet, out, prompt_ids=ids)
+        reply = self._generate(pet, out, prompt_ids=ids)
         pet.diary.append({"t": time.time(), "label": "出生：被主人领回家", "reply": reply})
         with self._lock:
             self.pets[meta.pet_id] = pet
         self._save(pet)
+        self._save_birth(pet)  # 出生大脑（rank-4 压缩，~1.6MB）供"成长档案"对比
         return self.describe(pet)
+
+    def _save_birth(self, pet: MemoPet) -> None:
+        self._ensure_gpu(pet)
+        cur = torch.stack([pet.cache[i]["recurrent_state"][0] for i in range(self.model.config.num_hidden_layers)])
+        payload = svd_truncate(cur.float(), 4)
+        payload["meta"] = {"pet_id": pet.meta.pet_id, "persona": pet.meta.persona_id}
+        torch.save(payload, self.births_dir / f"{pet.meta.pet_id}.rank4.pt")
+
+    def growth(self, pet_id: str) -> dict:
+        """成长档案：当前大脑 vs 出生大脑的逐层余弦——"这只猫被你养成了什么样"。"""
+        pet = self.get(pet_id)
+        birth_path = self.births_dir / f"{pet.meta.pet_id}.rank4.pt"
+        if not birth_path.exists():
+            return {"layers": [], "mean_cos": None, "note": "出生大脑未记录"}
+        birth = lowrank_reconstruct(torch.load(birth_path, map_location="cpu", weights_only=False))
+        with pet.lock:
+            snap = self._snapshot(pet)
+            cur = torch.stack([rec[0].float() for rec, _, _ in snap])
+        layers = []
+        for i in range(cur.shape[0]):
+            x = cur[i].reshape(cur.shape[1], -1)
+            y = birth[i].float().reshape(birth.shape[1], -1)
+            cos = torch.nn.functional.cosine_similarity(x, y, dim=-1).mean().item()
+            layers.append({"i": i, "cos": round(cos, 4)})
+        mean_cos = round(sum(layer["cos"] for layer in layers) / len(layers), 4)
+        return {"layers": layers, "mean_cos": mean_cos}
 
     def fork(self, pet_id: str, new_name: str) -> dict:
         src = self.get(pet_id)
@@ -217,12 +255,20 @@ class PetHome:
         with self._lock:
             self.pets[meta.pet_id] = pet
         self._save(pet)
+        self._save_birth(pet)  # 分身的"出生"= 此刻，成长档案从 0 开始
         return self.describe(pet)
 
     def delete(self, pet_id: str) -> bool:
         with self._lock:
             existed = self.pets.pop(pet_id, None) is not None
+            if pet_id in self._loaded:
+                self._loaded.remove(pet_id)
         (self.pets_dir / f"{pet_id}.pt").unlink(missing_ok=True)
+        (self.births_dir / f"{pet_id}.rank4.pt").unlink(missing_ok=True)
+        snap_dir = self.snapshots_dir / pet_id
+        if snap_dir.exists():
+            for f in snap_dir.glob("*.pt"):
+                f.unlink(missing_ok=True)
         return existed
 
     def get(self, pet_id: str) -> MemoPet:
@@ -250,31 +296,54 @@ class PetHome:
             pets = list(self.pets.values())
         return [self.describe(p) for p in pets]
 
+    # ---------- 自动存档 / 时光倒流 ----------
+
+    def _write_snapshot(self, pet: MemoPet) -> None:
+        d = self.snapshots_dir / pet.meta.pet_id
+        d.mkdir(exist_ok=True)
+        ts = int(time.time())
+        torch.save(self._payload(pet), d / f"{ts}.pt")
+        files = sorted(d.glob("*.pt"))
+        for f in files[:-MAX_SNAPSHOTS]:
+            f.unlink(missing_ok=True)
+
+    def snapshots(self, pet_id: str) -> list[dict]:
+        self.get(pet_id)
+        d = self.snapshots_dir / pet_id
+        if not d.exists():
+            return []
+        return [
+            {"ts": int(f.stem), "when": time.strftime("%m-%d %H:%M", time.localtime(int(f.stem)))}
+            for f in sorted(d.glob("*.pt"), reverse=True)
+        ]
+
+    def restore_snapshot(self, pet_id: str, ts: int) -> dict:
+        pet = self.get(pet_id)
+        path = self.snapshots_dir / pet_id / f"{ts}.pt"
+        if not path.exists():
+            raise KeyError(f"unknown snapshot {ts}")
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        with pet.lock:
+            pet.meta = backfill_meta(payload["meta"])
+            pet.diary = payload["diary"]
+            pet.parked = payload["state"]
+            pet.cache = None
+            self._save(pet)
+        return self.describe(pet)
+
     # ---------- 交互 ----------
 
     def _gen_deltas(self, pet: MemoPet, out, prompt_ids: list[int],
                     max_tokens: int = MAX_NEW_TOKENS):
-        """逐 token 采样并 yield 增量文本；停轮条件与 stateswap 对齐
-        （\\n\\n / 幻觉的 "User:"），停止前不再把 token 喂回状态。
-        截断发生在增量产生之后——流式已吐出的尾巴以最终帧为准覆盖。"""
+        """逐 token 采样并 yield 增量文本；停轮条件走 rules.apply_stop，
+        停止前不再把 token 喂回状态。截断发生在增量产生之后。"""
         inc = codecs.getincrementaldecoder("utf-8")(errors="replace")
         text, recent = "", list(prompt_ids)
         with torch.no_grad():
             for _ in range(max_tokens):
                 nxt = Engine._sample(None, out.logits[0, -1], 0.8, 0.8, recent, 1.25, 8)
                 recent.append(nxt)
-                delta = inc.decode(self.tok.id_to_bytes[nxt])
-                new_text = text + delta
-                stop = False
-                if "\n\n" in new_text:
-                    new_text = new_text.split("\n\n")[0]
-                    stop = True
-                elif "User:" in new_text:
-                    new_text = new_text.split("User:")[0]
-                    stop = True
-                elif new_text.endswith("User"):
-                    new_text = new_text[: -len("User")]
-                    stop = True
+                new_text, stop = apply_stop(text + inc.decode(self.tok.id_to_bytes[nxt]))
                 if stop:
                     if len(new_text) > len(text):
                         yield new_text[len(text):]
@@ -291,17 +360,12 @@ class PetHome:
                   max_tokens: int = MAX_NEW_TOKENS) -> str:
         return "".join(self._gen_deltas(pet, out, prompt_ids, max_tokens))
 
-    def _dream(self, pet: MemoPet) -> str | None:
+    def _dream(self, pet: MemoPet, gap_hours: float) -> str | None:
         """睡了一觉回来先做梦：梦里是当前状态生成的碎片，随后成为真实记忆
-        （生成过程本身写进状态）。退化则回滚跳过——梦可以怪，不能复读。"""
+        （生成过程本身写进状态）。梦的内容随饥饿/心情/离开时长变化。
+        退化则回滚跳过——梦可以怪，不能复读。"""
         snap = self._snapshot(pet)
-        # 梦的回忆只取"真实相处"，不引用上一次的梦——梦里套梦会滚雪球
-        real = [e for e in pet.diary if e["label"] != "做了一个梦"]
-        lines = "".join(f"- {e['label']}\n" for e in real[-2:])
-        prompt = (
-            f"（最近的相处回忆：\n{lines}）\n\n"
-            "User: （你睡着了。梦里有一些模模糊糊的碎片……）\n\nAssistant: "
-        )
+        prompt = dream_prompt(pet.diary, pet.meta, gap_hours, random.choice(DREAM_OPENERS))
         ids = self.tok.encode(prompt)
         with torch.no_grad():
             out = self.model(
@@ -329,6 +393,7 @@ class PetHome:
         由最终帧的替换文案覆盖（状态已回滚）。"""
         pet = self.get(pet_id)
         with pet.lock:
+            self._ensure_gpu(pet)
             now = time.time()
             prev_seen = pet.meta.last_seen
             gap_hours = max(0.0, now - prev_seen) / 3600 if prev_seen else 0.0
@@ -336,11 +401,10 @@ class PetHome:
             dream = None
             if (prev_seen > 0 and pet.meta.interactions >= 1
                     and now - prev_seen >= self.dream_gap_sec):
-                dream = self._dream(pet)
+                dream = self._dream(pet, gap_hours)
             pet.meta.last_seen = now
             # 时间流逝的代价：不喂自然会饿、心情回归中位（作用于动作加成之前）
-            if gap_hours > 0:
-                _decay_meters(pet.meta, gap_hours)
+            decay_meters(pet.meta, gap_hours)
             if dream:
                 yield {"dream": dream}
             snap = self._snapshot(pet)  # 退化护栏：本轮开始前的大脑快照
@@ -356,7 +420,7 @@ class PetHome:
             if pet.diary:
                 lines = "".join(f"- {e['label']}\n" for e in pet.diary[-REPLAY_EVENTS:])
                 parts.append(f"（最近的相处回忆：\n{lines}）\n")
-            parts.append(_meters_hint(pet.meta) + "\n")
+            parts.append(meters_hint(pet.meta) + "\n")
             parts.append(user_text)
             prompt = "User: " + "".join(parts) + "\n\nAssistant: "
             ids = self.tok.encode(prompt)
@@ -384,7 +448,13 @@ class PetHome:
                 setattr(pet.meta, k, min(1.0, max(0.0, getattr(pet.meta, k) + dv)))
             pet.meta.interactions += 1
             pet.diary.append({"t": time.time(), "label": label, "reply": reply})
-            self._save(pet)
+            # 自动存档：超过间隔写一份快照，保留最近 MAX_SNAPSHOTS 份
+            if now - pet.meta.last_snapshot >= AUTO_SNAPSHOT_HOURS * 3600:
+                pet.meta.last_snapshot = now
+                self._save(pet)
+                self._write_snapshot(pet)
+            else:
+                self._save(pet)
             yield {"reply": reply, "degenerated": False, "dream": dream, **self.describe(pet)}
 
     def import_save(self, content: bytes) -> dict:
@@ -393,7 +463,7 @@ class PetHome:
         import io
 
         payload = torch.load(io.BytesIO(content), map_location="cpu", weights_only=False)
-        meta = PetMeta(**payload["meta"])  # 缺字段即格式不符，抛 TypeError/KeyError
+        meta = backfill_meta(payload["meta"])  # 缺字段即格式不符，抛异常
         if meta.pet_id in self.pets:  # 与在住猫撞号：换新 id 入住，不覆盖原猫
             meta.pet_id = uuid.uuid4().hex[:10]
             payload["meta"]["pet_id"] = meta.pet_id

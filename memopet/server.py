@@ -28,6 +28,10 @@ class NameRequest(BaseModel):
     persona_id: str = "none"  # none = 白纸冷启动；否则为 S0 人格 id
 
 
+class RestoreRequest(BaseModel):
+    ts: int  # 快照时间戳（GET /snapshots 返回的 ts）
+
+
 def create_app(model_dir: str, vocab: str, pets_dir: str,
                s0_dir: str | None = None, dream_gap_hours: float = 6.0) -> FastAPI:
     app = FastAPI(title="memopet", version="0.1.0")
@@ -123,6 +127,28 @@ def create_app(model_dir: str, vocab: str, pets_dir: str,
     def diary(pet_id: str):
         pet = _home().get(pet_id)
         return {"diary": pet.diary[-100:]}  # 端点只回最近 100 条，完整日记在存档里
+
+    @app.get("/api/pets/{pet_id}/growth")
+    def growth(pet_id: str):
+        """成长档案：当前大脑 vs 出生大脑的逐层余弦（"这只猫被你养成了什么样"）。"""
+        try:
+            return _home().growth(pet_id)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+
+    @app.get("/api/pets/{pet_id}/snapshots")
+    def snapshots(pet_id: str):
+        try:
+            return {"snapshots": _home().snapshots(pet_id)}
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+
+    @app.post("/api/pets/{pet_id}/restore")
+    def restore(pet_id: str, req: RestoreRequest = Body(...)):
+        try:
+            return _home().restore_snapshot(pet_id, req.ts)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
 
     @app.post("/api/pets/{pet_id}/fork")
     def fork(pet_id: str, req: NameRequest = Body(...)):

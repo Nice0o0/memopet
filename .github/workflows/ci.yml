@@ -16,6 +16,10 @@ jobs:
       - name: Ruff
         run: |
           pip install ruff
-          ruff check memopet
+          ruff check memopet tests
       - name: Compile check
         run: python -m compileall memopet
+      - name: Tests (pure logic, no GPU)
+        run: |
+          pip install pytest
+          pytest -q tests
