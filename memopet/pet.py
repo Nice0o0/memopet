@@ -184,12 +184,13 @@ class PetHome:
         s0_path = self.personas.get(persona_id)
         if persona_id != "none" and s0_path is None:
             raise ValueError(f"unknown persona {persona_id}")
-        with self._lock:
-            if len(self.pets) >= 30:
-                raise ValueError("猫窝满了（最多 30 只）——先放归几只吧")
         meta = PetMeta(pet_id=uuid.uuid4().hex[:10], name=name, born_at=time.time(),
                        persona_id=persona_id, last_seen=time.time())
         pet = MemoPet(meta=meta, cache=self._blank_cache(s0_path))
+        with self._lock:
+            if len(self.pets) >= 30:
+                raise ValueError("猫窝满了（最多 30 只）——先放归几只吧")
+            self.pets[meta.pet_id] = pet  # 先占位：创世生成需数秒，否则并发领养可越过上限
         # 创世预填：把"它是谁"写进状态——这段经历永远在它脑子里
         origin = "带着一段与生俱来的性格（烘焙好的初始状态）" if s0_path is not None else "作为一张白纸"
         genesis = (
@@ -198,16 +199,19 @@ class PetHome:
             f"今天是你们相遇的第一天，主人把你从屏幕里领了出来。\n\n"
             f"User: （你睁开了眼睛，第一次看到了主人）你好呀，小家伙。\n\nAssistant: "
         )
-        ids = self.tok.encode(genesis)
-        with torch.no_grad():
-            out = self.model(
-                input_ids=torch.tensor([ids], device=self.device),
-                past_key_values=pet.cache, use_cache=True,
-            )
-        reply = self._generate(pet, out, prompt_ids=ids)
+        try:
+            ids = self.tok.encode(genesis)
+            with torch.no_grad():
+                out = self.model(
+                    input_ids=torch.tensor([ids], device=self.device),
+                    past_key_values=pet.cache, use_cache=True,
+                )
+            reply = self._generate(pet, out, prompt_ids=ids)
+        except Exception:
+            with self._lock:
+                self.pets.pop(meta.pet_id, None)  # 创世失败：让出名额
+            raise
         pet.diary.append({"t": time.time(), "label": "出生：被主人领回家", "reply": reply})
-        with self._lock:
-            self.pets[meta.pet_id] = pet
         self._save(pet)
         self._save_birth(pet)  # 出生大脑（rank-4 压缩，~1.6MB）供"成长档案"对比
         return self.describe(pet)
