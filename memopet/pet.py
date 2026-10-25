@@ -473,4 +473,8 @@ class PetHome:
             payload["meta"]["pet_id"] = meta.pet_id
         path = self.pets_dir / f"{meta.pet_id}.pt"
         torch.save(payload, path)
-        return self.describe(self._adopt(path))
+        try:
+            return self.describe(self._adopt(path))
+        except Exception:
+            path.unlink(missing_ok=True)  # 坏存档不留孤儿文件（否则每次启动都报一次跳过）
+            raise
