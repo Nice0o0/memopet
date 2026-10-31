@@ -53,36 +53,38 @@ async function loadSlots() {
 }
 
 /* ---------- 舞台 ---------- */
-/* 手绘二次元小猫：chibi 比例、渐变虹膜大眼（带高光）、ω 猫嘴、腮红、
-   会摇的呆毛；心情三态（开心眯眼 / 常态 / 难过含泪）；dim=true 灰调版。 */
+/* 手绘二次元小猫（工业终端配色：蓝白女仆色系 + 白色褶边发箍）。
+   心情三态：开心眯眼 / 常态大眼 / 难过含泪；dim=true 灰调版（空状态）。 */
 function catSvg(mood, dim = false) {
   const C = dim
-    ? { cream: "#c3c7ce", ginger: "#a9adb5", lash: "#6f737b", nose: "#a9a29b",
-        irisA: "#d7dade", irisB: "#b9bdc4", blush: "#dadde2", tear: "#cfe0ee",
-        bell: "#c9cdd4", collar: "#9aa0a8", whisker: "#b6bac2" }
-    : { cream: "#ffe9c9", ginger: "#f4a259", lash: "#4a3520", nose: "#e88a8a",
-        irisA: "#ffd27a", irisB: "#ef8b32", blush: "#ffb3ba", tear: "#a5d8ff",
-        bell: "#ffd34d", collar: "#5b74ff", whisker: "#e3b877" };
+    ? { cream: "#b9c2cb", ginger: "#8494ad", inner: "#cfd6df", dark: "#5a6570",
+        nose: "#98a3ad", irisA: "#c3ccd6", irisB: "#8d98a3", blush: "#c3ccd6",
+        tear: "#cfe0ee", bell: "#b9c2cb", collar: "#8494ad", whisker: "#9aa5ae",
+        frill: "#d6dde4" }
+    : { cream: "#e8eef7", ginger: "#7d9bd1", inner: "#c9d8ef", dark: "#22303f",
+        nose: "#7f95b5", irisA: "#9fc4ff", irisB: "#4a6fa5", blush: "#f0b6c0",
+        tear: "#a5d8ff", bell: "#ffd34d", collar: "#3b5a8f", whisker: "#b7c7de",
+        frill: "#f4f8fd" };
   const eye = (cx) => `
-      <path d="M${cx - 6} 36.5 q6 -5.5 12 0" stroke="${C.lash}" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M${cx - 6} 36.5 q6 -5.5 12 0" stroke="${C.dark}" stroke-width="2.4" fill="none" stroke-linecap="round"/>
       <ellipse cx="${cx}" cy="43" rx="5.4" ry="6.8" fill="url(#irisGrad)"/>
-      <ellipse cx="${cx}" cy="44.6" rx="2.1" ry="4.2" fill="${C.lash}"/>
+      <ellipse cx="${cx}" cy="44.6" rx="2.1" ry="4.2" fill="${C.dark}"/>
       <circle cx="${cx - 2.2}" cy="40.4" r="1.9" fill="#fff"/>
       <circle cx="${cx + 2.4}" cy="46.6" r="0.9" fill="#fff" opacity="0.85"/>`;
   const eyes = mood === "happy"
-    ? `<path d="M30 43 q6 -7 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>
-       <path d="M54 43 q6 -7 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>`
+    ? `<path d="M30 43 q6 -7 12 0" stroke="${C.dark}" stroke-width="3" fill="none" stroke-linecap="round"/>
+       <path d="M54 43 q6 -7 12 0" stroke="${C.dark}" stroke-width="3" fill="none" stroke-linecap="round"/>`
     : mood === "sad"
-    ? `<path d="M30 45 q6 5 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>
-       <path d="M54 45 q6 5 12 0" stroke="${C.lash}" stroke-width="3" fill="none" stroke-linecap="round"/>
+    ? `<path d="M30 45 q6 5 12 0" stroke="${C.dark}" stroke-width="3" fill="none" stroke-linecap="round"/>
+       <path d="M54 45 q6 5 12 0" stroke="${C.dark}" stroke-width="3" fill="none" stroke-linecap="round"/>
        <path d="M62.5 50 q2.6 3.6 0 5.2 q-2.6 -1.6 0 -5.2" fill="${C.tear}"/>`
     : `<g class="cat-eyes">${eye(36)}${eye(60)}</g>`;
   const mouth = mood === "happy"
-    ? `<path d="M44.2 52.2 q3.8 5 7.6 0 z" fill="${C.lash}"/>
+    ? `<path d="M44.2 52.2 q3.8 5 7.6 0 z" fill="${C.dark}"/>
        <ellipse cx="48" cy="54.6" rx="1.9" ry="1.1" fill="#ff9aa2"/>`
     : mood === "sad"
-    ? `<path d="M45 55 q3 -2.6 6 0" stroke="${C.lash}" stroke-width="2" fill="none" stroke-linecap="round"/>`
-    : `<path d="M44.2 52.6 q1.9 2.6 3.8 0 q1.9 2.6 3.8 0" stroke="${C.lash}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
+    ? `<path d="M45 55 q3 -2.6 6 0" stroke="${C.dark}" stroke-width="2" fill="none" stroke-linecap="round"/>`
+    : `<path d="M44.2 52.6 q1.9 2.6 3.8 0 q1.9 2.6 3.8 0" stroke="${C.dark}" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
   const ears = mood === "sad"
     ? `<path d="M28 32 Q 19 12 35 17 Q 41 20 45 23 Z" fill="${C.ginger}"/>
        <path d="M68 32 Q 77 12 61 17 Q 55 20 51 23 Z" fill="${C.ginger}"/>`
@@ -100,10 +102,16 @@ function catSvg(mood, dim = false) {
     <ellipse cx="40" cy="82.5" rx="5" ry="3.2" fill="${C.cream}"/>
     <ellipse cx="56" cy="82.5" rx="5" ry="3.2" fill="${C.cream}"/>
     ${ears}
-    <path d="M31 27 Q 26 16 35 19 Q 39 21 41 23 Z" fill="${C.blush}" opacity="0.9"/>
-    <path d="M65 27 Q 70 16 61 19 Q 57 21 55 23 Z" fill="${C.blush}" opacity="0.9"/>
+    <path d="M31 27 Q 26 16 35 19 Q 39 21 41 23 Z" fill="${C.inner}" opacity="0.9"/>
+    <path d="M65 27 Q 70 16 61 19 Q 57 21 55 23 Z" fill="${C.inner}" opacity="0.9"/>
     <path class="ahoge" d="M47 12 q 3.5 -8 9.5 -6.5 q -5.5 2 -4 8" fill="none" stroke="${C.ginger}" stroke-width="2.6" stroke-linecap="round"/>
     <circle cx="48" cy="41" r="26" fill="${C.cream}"/>
+    <g>
+      <circle cx="27" cy="21" r="6.5" fill="${C.frill}"/><circle cx="35" cy="16.5" r="7" fill="${C.frill}"/>
+      <circle cx="44" cy="14" r="7.5" fill="${C.frill}"/><circle cx="53" cy="14" r="7.5" fill="${C.frill}"/>
+      <circle cx="62" cy="16.5" r="7" fill="${C.frill}"/><circle cx="70" cy="21" r="6.5" fill="${C.frill}"/>
+      <path d="M25 20 Q 48 8 71 20 L 71 24 Q 48 13 25 24 Z" fill="${C.frill}" stroke="${C.inner}" stroke-width="0.8"/>
+    </g>
     <ellipse cx="30.5" cy="49.5" rx="5" ry="2.8" fill="${C.blush}" opacity="0.65"/>
     <ellipse cx="65.5" cy="49.5" rx="5" ry="2.8" fill="${C.blush}" opacity="0.65"/>
     ${eyes}
@@ -125,21 +133,33 @@ function renderCat(mood) {
 
 function renderEmptyStage() {
   $("pet-emoji").innerHTML = catSvg("normal", true);
-  $("pet-name").textContent = "还没有猫";
+  $("pet-name").textContent = "NO UNIT";
   $("pet-meta").textContent = "起个名字，领一只回家吧";
   $("bar-hunger").style.width = "0%";
   $("bar-mood").style.width = "0%";
   $("bubble").classList.add("hidden");
   $("growth").classList.add("hidden");
+  $("hud-day").textContent = "D0";
+  $("hud-persona").textContent = "—";
+}
+
+/* ---------- HUD 时钟 ---------- */
+function tickClock() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  $("hud-clock").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function renderPet(p) {
   const mood = p.mood > 0.7 ? "happy" : p.mood < 0.35 ? "sad" : "normal";
   renderCat(mood);
   $("pet-name").textContent = p.name;
-  $("pet-meta").textContent = `来到你家 ${p.age_days} 天 · ${p.interactions} 次互动`;
+  $("pet-meta").textContent = `AGE ${p.age_days}D · OPS ${p.interactions}`;
   $("bar-hunger").style.width = `${Math.round(p.hunger * 100)}%`;
   $("bar-mood").style.width = `${Math.round(p.mood * 100)}%`;
+  $("hud-day").textContent = `D${p.age_days}`;
+  $("hud-persona").textContent = p.persona_id === "none" ? "BLANK" : p.persona_id.toUpperCase();
+  $("hud-mem").textContent = "12.8 MB";
 }
 
 async function selectPet(id) {
@@ -238,14 +258,15 @@ async function interact(action, text = "") {
   const myPet = activeId; // 生成期间可能切换宠物：回应只属于发起它的猫
   const bubble = $("bubble");
   bubble.classList.remove("hidden");
+  bubble.classList.add("streaming"); // 流式光标 ▌
   bubble.textContent = "…";
+  let dreamText = null, acc = "";
   // 生成期间切走了宠物就不再写舞台（只刷新列表），避免 A 猫的话出现在 B 猫的气泡里
   const show = (t) => {
     if (activeId !== myPet) return;
     bubble.textContent = t;
     bubble.scrollTop = bubble.scrollHeight; // 限高后自动跟到最新一行
   };
-  let dreamText = null, acc = "";
   const withDream = (t) => (dreamText ? `🌙 它刚睡醒，梦到了：${dreamText}\n\n${t}` : t);
   try {
     const res = await fetch(`/api/pets/${myPet}/interact/stream`, {
@@ -285,6 +306,7 @@ async function interact(action, text = "") {
     show(`⚠ ${e.message}`);
   } finally {
     busy = false;
+    bubble.classList.remove("streaming");
     document.querySelectorAll("#actions button, #chat-row button").forEach((b) => (b.disabled = false));
   }
 }
@@ -383,6 +405,8 @@ applyThemeIcon();
 
 /* ---------- 启动 ---------- */
 (async () => {
+  tickClock();
+  setInterval(tickClock, 1000);
   for (let i = 0; i < 60; i++) {
     try {
       const h = await fetch("/health").then((r) => r.json());

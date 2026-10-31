@@ -3,89 +3,126 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MemoPet · 递归状态电子宠物</title>
+  <title>MemoPet · STATE TERMINAL</title>
   <script>
     (() => {
       const saved = localStorage.getItem("memopet-theme");
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      document.documentElement.dataset.theme = saved || (prefersDark ? "dark" : "light");
+      document.documentElement.dataset.theme = saved || "dark";
     })();
   </script>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpolygon points='30,26 24,5 43,17' fill='%23f4a259'/%3E%3Cpolygon points='66,26 72,5 53,17' fill='%23f4a259'/%3E%3Ccircle cx='48' cy='46' r='30' fill='%23ffe9c9'/%3E%3Ccircle cx='38' cy='44' r='3.5' fill='%234a3520'/%3E%3Ccircle cx='58' cy='44' r='3.5' fill='%234a3520'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=0.8">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpolygon points='30,26 24,5 43,17' fill='%237d9bd1'/%3E%3Cpolygon points='66,26 72,5 53,17' fill='%237d9bd1'/%3E%3Ccircle cx='48' cy='46' r='30' fill='%23e8eef7'/%3E%3Ccircle cx='38' cy='44' r='3.5' fill='%2322303f'/%3E%3Ccircle cx='58' cy='44' r='3.5' fill='%2322303f'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css?v=0.9">
 </head>
 <body>
-  <header id="top">
-    <div class="logo">memo<span>pet</span></div>
-    <button id="btn-theme" title="切换亮/暗主题" aria-label="切换亮/暗主题">🌙</button>
-    <span id="status" class="dot-off" title="服务状态">●</span>
-  </header>
+  <div class="room">
+    <div class="bezel">
+      <span class="screw tl"></span><span class="screw tr"></span>
+      <span class="screw bl"></span><span class="screw br"></span>
+      <div class="side-switches" title="AUX"><span></span><span></span></div>
+      <span class="power-led" title="POWER"></span>
 
-  <main>
-    <aside id="slots-panel">
-      <div class="panel-title">猫窝</div>
-      <div id="slot-list"></div>
-      <div class="create-row">
-        <input id="new-name" placeholder="起个名字" maxlength="16">
-        <select id="new-persona" title="出生人格（初始大脑）"></select>
-        <button id="btn-create">领养</button>
-        <button id="btn-import" class="ghost" title="导入朋友送的 .pt 存档">📥 导入</button>
-        <input type="file" id="import-file" accept=".pt" hidden>
+      <div class="screen">
+        <header id="top">
+          <div class="logo">MEMO<span>PET</span></div>
+          <div class="hud-center">
+            <span class="hud-label">STATE&nbsp;TERMINAL</span>
+            <span class="hud-dim" id="hud-persona">—</span>
+          </div>
+          <div class="top-tools">
+            <button id="btn-theme" title="切换昼/夜终端">◐</button>
+            <span id="status" class="dot-off" title="LINK">●</span>
+            <span class="win-btn">─</span>
+            <span class="win-btn close">✕</span>
+          </div>
+        </header>
+
+        <main>
+          <aside id="slots-panel">
+            <div class="hud-label">01 · CAT&nbsp;BAY</div>
+            <div id="slot-list"></div>
+            <div class="create-row">
+              <input id="new-name" placeholder="NAME" maxlength="16">
+              <select id="new-persona" title="出生人格（初始大脑）"></select>
+              <button id="btn-create">[ 领养 ]</button>
+              <button id="btn-import" class="ghost" title="导入朋友送的 .pt 存档">[ 导入 ]</button>
+              <input type="file" id="import-file" accept=".pt" hidden>
+            </div>
+          </aside>
+
+          <section id="stage-panel">
+            <div id="stage-head">
+              <div class="head-info">
+                <div id="pet-name">NO&nbsp;UNIT</div>
+                <div id="pet-meta" class="hud-dim"></div>
+              </div>
+              <div class="head-tools">
+                <button id="btn-growth" title="成长档案：这只猫被你养成了什么样">📈</button>
+                <button id="btn-timetravel" title="时光倒流：回到最近一次自动存档">🕰️</button>
+                <button id="btn-export" title="导出存档：把这只猫的完整大脑送给朋友">⬇️</button>
+                <button id="btn-fork" title="分身：复制此刻的大脑状态为新宠物">🧬</button>
+                <button id="btn-delete" class="danger" title="放归：删除它的记忆张量（无法找回）">🙏</button>
+              </div>
+            </div>
+
+            <div id="habitat">
+              <div id="pet-emoji">🐱</div>
+              <div id="bubble" class="hidden"></div>
+            </div>
+
+            <div id="growth" class="hidden">
+              <div class="growth-head">
+                <span class="hud-label">GROWTH&nbsp;DELTA</span>
+                <span id="growth-summary" class="hud-dim"></span>
+              </div>
+              <div id="growth-bars"></div>
+              <div class="growth-note hud-dim">柱高/颜色 = 当前大脑与出生大脑的逐层余弦，越接近 1 越像出生时</div>
+            </div>
+
+            <div id="actions">
+              <button data-act="feed"><span class="act-ico">🍖</span><span>喂食</span></button>
+              <button data-act="play"><span class="act-ico">🎾</span><span>玩耍</span></button>
+              <button data-act="pet"><span class="act-ico">🐾</span><span>摸摸</span></button>
+              <button data-act="scold"><span class="act-ico">🙀</span><span>责骂</span></button>
+            </div>
+
+            <form id="chat-row">
+              <input id="chat-input" placeholder="> INPUT MESSAGE…" maxlength="200" autocomplete="off">
+              <button type="submit" title="发送">➤</button>
+            </form>
+          </section>
+
+          <aside id="diary-panel">
+            <div class="hud-label">02 · MEMORY&nbsp;LOG</div>
+            <div id="diary-list"></div>
+          </aside>
+        </main>
+
+        <footer id="hud-bottom">
+          <div class="hud-clock-wrap">
+            <span class="hud-pause">❚❚</span>
+            <span id="hud-day" class="hud-day">D0</span>
+            <span id="hud-clock">00:00:00</span>
+          </div>
+          <div class="hud-mini">
+            <span class="hud-dim">HUNGER</span>
+            <div class="bar mini"><div id="bar-hunger"></div></div>
+            <span class="hud-dim">MOOD</span>
+            <div class="bar mini"><div id="bar-mood"></div></div>
+          </div>
+          <div class="hud-right">
+            <span class="hud-dim">ACTIVE&nbsp;MEMORY&nbsp;CAPACITY</span>
+            <span id="hud-mem" class="hud-val">12.8&nbsp;MB</span>
+          </div>
+        </footer>
       </div>
-    </aside>
 
-    <section id="stage-panel">
-      <div id="stage-head">
-        <div class="head-info">
-          <div id="pet-name">还没有猫</div>
-          <div id="pet-meta" class="muted"></div>
-        </div>
-        <div class="head-tools">
-          <button id="btn-growth" title="成长档案：这只猫被你养成了什么样">📈</button>
-          <button id="btn-timetravel" title="时光倒流：回到最近一次自动存档">🕰️</button>
-          <button id="btn-export" title="导出存档：把这只猫的完整大脑送给朋友">⬇️</button>
-          <button id="btn-fork" title="分身：复制此刻的大脑状态为新宠物">🧬</button>
-          <button id="btn-delete" class="danger" title="放归：删除它的记忆张量（无法找回）">🙏</button>
-        </div>
+      <div class="bezel-bottom">
+        <span class="vents"></span>
+        <span class="bezel-label">TY-3000 · RWKV-7 STATE UNIT</span>
+        <span class="vents"></span>
       </div>
-
-      <div id="habitat">
-        <div id="pet-emoji">🐱</div>
-        <div id="bubble" class="hidden"></div>
-      </div>
-
-      <div id="meters">
-        <div class="meter-row"><span>🍖 饱食</span><div class="bar"><div id="bar-hunger"></div></div></div>
-        <div class="meter-row"><span>😺 心情</span><div class="bar"><div id="bar-mood"></div></div></div>
-      </div>
-
-      <div id="growth" class="hidden">
-        <div class="growth-head">
-          <span>成长档案</span>
-          <span id="growth-summary" class="muted"></span>
-        </div>
-        <div id="growth-bars"></div>
-        <div class="growth-note muted">柱高/颜色 = 当前大脑与出生大脑的逐层余弦，越接近 1 越像出生时</div>
-      </div>
-
-      <div id="actions">
-        <button data-act="feed">🍖<span>喂食</span></button>
-        <button data-act="play">🎾<span>玩耍</span></button>
-        <button data-act="pet">🐾<span>摸摸</span></button>
-        <button data-act="scold">🙀<span>责骂</span></button>
-      </div>
-
-      <form id="chat-row">
-        <input id="chat-input" placeholder="跟它说点什么…" maxlength="200" autocomplete="off">
-        <button type="submit" title="发送">➤</button>
-      </form>
-    </section>
-
-    <aside id="diary-panel">
-      <div class="panel-title">日记本</div>
-      <div id="diary-list"></div>
-    </aside>
-  </main>
-  <script src="app.js?v=0.5"></script>
+    </div>
+  </div>
+  <script src="app.js?v=0.6"></script>
 </body>
 </html>
